@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>記帳與財務預測</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero panel">
+      <div>
+        <p class="eyebrow">Financial Planner</p>
+        <h1>記帳與一年財務預測</h1>
+        <p class="subtitle">輸入目前存款、每月定期收支與分期付款，立即看到未來每月資金走勢。</p>
+      </div>
+      <div class="hero-badge">
+        <span>本地持久化</span>
+        <strong>localStorage</strong>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel settings-panel">
+        <h2>預測設定</h2>
+        <form id="settings-form" novalidate>
+          <div class="form-grid two">
+            <label>
+              目前存款（TWD）
+              <input id="initial-balance" name="initialBalance" type="number" min="0" step="1" required>
+            </label>
+            <label>
+              預測月數（1-120）
+              <input id="horizon-months" name="horizonMonths" type="number" min="1" max="120" step="1" required>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">套用設定</button>
+          </div>
+          <p id="settings-error" class="form-error" role="alert"></p>
+        </form>
+      </section>
+
+      <section class="summary-grid">
+        <article class="panel summary-card">
+          <p>首月淨額</p>
+          <strong id="summary-monthly-net">$0</strong>
+        </article>
+        <article class="panel summary-card">
+          <p>期末餘額</p>
+          <strong id="summary-ending-balance">$0</strong>
+        </article>
+        <article class="panel summary-card">
+          <p>負餘額月數</p>
+          <strong id="summary-negative-count">0</strong>
+        </article>
+      </section>
+
+      <section class="management-grid">
+        <article class="panel">
+          <div class="section-title">
+            <h2>定期收入（每月）</h2>
+          </div>
+          <form id="income-form" novalidate>
+            <input type="hidden" id="income-edit-id">
+            <div class="form-grid">
+              <label>
+                名稱
+                <input id="income-name" type="text" maxlength="40" required>
+              </label>
+              <label>
+                分類
+                <input id="income-category" type="text" maxlength="30" placeholder="例如：薪資">
+              </label>
+              <label>
+                每月金額（TWD）
+                <input id="income-amount" type="number" min="0" step="1" required>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="income-submit-btn">新增收入</button>
+              <button type="button" class="btn btn-secondary hidden" id="income-cancel-btn">取消編輯</button>
+            </div>
+            <p id="income-error" class="form-error" role="alert"></p>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名稱</th>
+                  <th>分類</th>
+                  <th>每月金額</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="income-tbody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="section-title">
+            <h2>定期支出（每月）</h2>
+          </div>
+          <form id="expense-form" novalidate>
+            <input type="hidden" id="expense-edit-id">
+            <div class="form-grid">
+              <label>
+                名稱
+                <input id="expense-name" type="text" maxlength="40" required>
+              </label>
+              <label>
+                分類
+                <input id="expense-category" type="text" maxlength="30" placeholder="例如：房租">
+              </label>
+              <label>
+                每月金額（TWD）
+                <input id="expense-amount" type="number" min="0" step="1" required>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="expense-submit-btn">新增支出</button>
+              <button type="button" class="btn btn-secondary hidden" id="expense-cancel-btn">取消編輯</button>
+            </div>
+            <p id="expense-error" class="form-error" role="alert"></p>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名稱</th>
+                  <th>分類</th>
+                  <th>每月金額</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="expense-tbody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>分期付款（每月固定，期滿自動結束）</h2>
+        </div>
+        <form id="installment-form" novalidate>
+          <input type="hidden" id="installment-edit-id">
+          <div class="form-grid three">
+            <label>
+              名稱
+              <input id="installment-name" type="text" maxlength="40" required>
+            </label>
+            <label>
+              每月金額（TWD）
+              <input id="installment-amount" type="number" min="0" step="1" required>
+            </label>
+            <label>
+              剩餘月數（1-120）
+              <input id="installment-months" type="number" min="1" max="120" step="1" required>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="installment-submit-btn">新增分期</button>
+            <button type="button" class="btn btn-secondary hidden" id="installment-cancel-btn">取消編輯</button>
+          </div>
+          <p id="installment-error" class="form-error" role="alert"></p>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>每月金額</th>
+                <th>剩餘月數</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="installment-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="section-title">
+          <h2>預測結果</h2>
+          <p>從本月起算，每月更新。</p>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="forecast-chart" aria-label="月末餘額趨勢圖"></canvas>
+        </div>
+        <p id="chart-error" class="form-error" role="alert"></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th>起始餘額</th>
+                <th>定期收入</th>
+                <th>定期支出</th>
+                <th>分期支出</th>
+                <th>淨額</th>
+                <th>月末餘額</th>
+                <th>狀態</th>
+              </tr>
+            </thead>
+            <tbody id="forecast-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
