@@ -1,0 +1,26 @@
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.swp
+*.swo
+
+# VS Code workspace files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Codex local workspace data
+.codex/*
+!.codex/environments/
+.codex/environments/*
+!.codex/environments/environment.toml
