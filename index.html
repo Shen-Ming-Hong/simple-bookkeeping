@@ -39,7 +39,12 @@
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">套用設定</button>
+            <button type="button" class="btn btn-secondary" id="export-backup-btn">匯出備份</button>
+            <button type="button" class="btn btn-secondary" id="import-backup-btn">匯入備份</button>
           </div>
+          <input id="import-backup-input" class="hidden" type="file" accept=".json,application/json">
+          <p class="form-note">可下載或匯入 JSON 備份檔；匯入時會先下載目前資料備份，再覆蓋現有內容。</p>
+          <p id="backup-status" class="status-message" role="alert"></p>
           <p id="settings-error" class="form-error" role="alert"></p>
         </form>
       </section>
@@ -62,7 +67,7 @@
       <section class="management-grid">
         <article class="panel">
           <div class="section-title">
-            <h2>定期收入（每月）</h2>
+            <h2>定期收入（每月或每年）</h2>
           </div>
           <form id="income-form" novalidate>
             <input type="hidden" id="income-edit-id">
@@ -76,8 +81,33 @@
                 <input id="income-category" type="text" maxlength="30" placeholder="例如：薪資">
               </label>
               <label>
-                每月金額（TWD）
+                金額（TWD）
                 <input id="income-amount" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                週期
+                <select id="income-cadence" required>
+                  <option value="monthly">每月</option>
+                  <option value="yearly">每年固定月份</option>
+                </select>
+              </label>
+              <label id="income-month-wrap" class="hidden">
+                年度月份
+                <select id="income-month-of-year">
+                  <option value="">請選擇月份</option>
+                  <option value="1">1 月</option>
+                  <option value="2">2 月</option>
+                  <option value="3">3 月</option>
+                  <option value="4">4 月</option>
+                  <option value="5">5 月</option>
+                  <option value="6">6 月</option>
+                  <option value="7">7 月</option>
+                  <option value="8">8 月</option>
+                  <option value="9">9 月</option>
+                  <option value="10">10 月</option>
+                  <option value="11">11 月</option>
+                  <option value="12">12 月</option>
+                </select>
               </label>
             </div>
             <div class="form-actions">
@@ -92,7 +122,8 @@
                 <tr>
                   <th>名稱</th>
                   <th>分類</th>
-                  <th>每月金額</th>
+                  <th>週期</th>
+                  <th>金額</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -103,7 +134,7 @@
 
         <article class="panel">
           <div class="section-title">
-            <h2>定期支出（每月）</h2>
+            <h2>定期支出（每月或每年）</h2>
           </div>
           <form id="expense-form" novalidate>
             <input type="hidden" id="expense-edit-id">
@@ -117,8 +148,33 @@
                 <input id="expense-category" type="text" maxlength="30" placeholder="例如：房租">
               </label>
               <label>
-                每月金額（TWD）
+                金額（TWD）
                 <input id="expense-amount" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                週期
+                <select id="expense-cadence" required>
+                  <option value="monthly">每月</option>
+                  <option value="yearly">每年固定月份</option>
+                </select>
+              </label>
+              <label id="expense-month-wrap" class="hidden">
+                年度月份
+                <select id="expense-month-of-year">
+                  <option value="">請選擇月份</option>
+                  <option value="1">1 月</option>
+                  <option value="2">2 月</option>
+                  <option value="3">3 月</option>
+                  <option value="4">4 月</option>
+                  <option value="5">5 月</option>
+                  <option value="6">6 月</option>
+                  <option value="7">7 月</option>
+                  <option value="8">8 月</option>
+                  <option value="9">9 月</option>
+                  <option value="10">10 月</option>
+                  <option value="11">11 月</option>
+                  <option value="12">12 月</option>
+                </select>
               </label>
             </div>
             <div class="form-actions">
@@ -133,7 +189,8 @@
                 <tr>
                   <th>名稱</th>
                   <th>分類</th>
-                  <th>每月金額</th>
+                  <th>週期</th>
+                  <th>金額</th>
                   <th>操作</th>
                 </tr>
               </thead>
