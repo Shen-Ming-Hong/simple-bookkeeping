@@ -20,11 +20,11 @@
 ## GitHub Pages 部署
 
 1. 建立新的 GitHub repository。
-2. 將本專案內容推到該 repository 的 `main` branch root。
-3. 到 GitHub repository 的 `Settings > Pages`。
-4. 在 `Build and deployment` 選擇 `Deploy from a branch`。
-5. Branch 選 `main`，資料夾選 `/ (root)`。
-6. 儲存後等待 GitHub Pages 發佈完成。
+2. 將本專案內容推到該 repository 的 `master` branch root。
+3. 在 repository 內建立 `.github/workflows/pages.yml`，使用 GitHub Actions 部署 GitHub Pages。
+4. 到 GitHub repository 的 `Settings > Pages`。
+5. 在 `Build and deployment` 的 `Source` 選擇 `GitHub Actions`。
+6. push 到 `master` 後等待 Actions 執行與 Pages 發佈完成。
 
 部署完成後，網址格式通常為：
 
