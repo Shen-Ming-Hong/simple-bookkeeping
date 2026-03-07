@@ -8,7 +8,6 @@ const CADENCE_YEARLY = "yearly";
 const APP_ID = "accounting_forecast";
 const EXPORT_VERSION = 1;
 const BACKUP_FILENAME_PREFIX = "accounting-backup";
-const PRE_IMPORT_BACKUP_FILENAME_PREFIX = "accounting-backup-before-import";
 const REQUIRED_BACKUP_DATA_KEYS = [
   "schemaVersion",
   "initialBalance",
@@ -180,11 +179,8 @@ async function handleImportBackup(event) {
     const payload = await parseBackupFile(file);
     validateImportPayload(payload);
 
-    const preImportPayload = buildExportPayload();
-    downloadBackupPayload(preImportPayload, PRE_IMPORT_BACKUP_FILENAME_PREFIX);
-
     const confirmed = window.confirm(
-      `即將匯入 ${formatImportLabel(payload.exportedAt)} 的備份，這會覆蓋目前所有資料。系統已先下載匯入前備份，是否繼續？`,
+      `即將匯入 ${formatImportLabel(payload.exportedAt)} 的備份，這會覆蓋目前所有資料。若要保留目前資料，請先點擊「匯出備份」。是否繼續？`,
     );
 
     if (!confirmed) {
@@ -342,8 +338,6 @@ function getImportErrorMessage(error) {
       return "匯入失敗：備份資料版本比目前網站新，請使用較新的版本開啟。";
     case "read_failed":
       return "匯入失敗：瀏覽器無法讀取該備份檔。";
-    case "browser_unsupported":
-      return "匯入失敗：瀏覽器目前不支援下載匯入前備份。";
     case "invalid_payload":
     default:
       return "匯入失敗：備份檔格式不完整或內容不正確。";
