@@ -30,7 +30,7 @@ body {
 }
 
 .app-shell {
-  width: min(1220px, 94vw);
+  width: min(1480px, 96vw);
   margin: 28px auto 56px;
 }
 
@@ -112,6 +112,11 @@ body {
 .panel h2 {
   margin: 0 0 12px;
   font-size: 1.15rem;
+}
+
+.panel h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .form-grid {
@@ -222,6 +227,26 @@ select:focus {
   font-size: 0.9rem;
 }
 
+.setting-note-card {
+  border: 1px dashed #b7ccd6;
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, #f8fcfe, #f2f7f9);
+}
+
+.setting-note-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-family: "Manrope", sans-serif;
+  color: var(--brand-strong);
+}
+
+.setting-note-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .status-message {
   margin: 8px 0 0;
   min-height: 1.2em;
@@ -265,7 +290,7 @@ select:focus {
 
 .management-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
   gap: 16px;
 }
 
@@ -301,6 +326,10 @@ table {
   min-width: 680px;
 }
 
+.management-grid table {
+  min-width: 0;
+}
+
 th,
 td {
   padding: 10px 12px;
@@ -324,6 +353,10 @@ tbody tr.negative-row {
   background: var(--warn-bg);
 }
 
+tbody tr.warning-row {
+  background: #fff4df;
+}
+
 .status-chip {
   display: inline-block;
   padding: 4px 8px;
@@ -342,15 +375,24 @@ tbody tr.negative-row {
   background: #ffd9d3;
 }
 
+.status-chip.caution {
+  color: #9a6700;
+  background: #fff1cc;
+}
+
 .table-actions {
   display: flex;
+  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 132px;
 }
 
 .table-actions .btn {
-  padding: 6px 10px;
+  padding: 6px 12px;
   font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .chart-wrap {
@@ -366,6 +408,109 @@ tbody tr.negative-row {
   height: 320px !important;
 }
 
+.batch-bar {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #d8e6ec;
+  border-radius: 14px;
+  background: #f8fcfd;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.batch-bar span {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.batch-panel {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #d8e6ec;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fcffff, #f5fbfc);
+}
+
+.batch-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.batch-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #dce8ee;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.batch-item-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.batch-item-meta strong {
+  font-size: 0.95rem;
+}
+
+.batch-item-meta span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.batch-item-select {
+  display: grid;
+  gap: 6px;
+}
+
+.batch-item-select span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.checkbox-col,
+.selection-cell {
+  width: 48px;
+  text-align: center;
+}
+
+.row-selector {
+  width: auto;
+}
+
+.results-stack {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.subsection-title {
+  margin-bottom: 8px;
+}
+
+.subsection-title h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+@media (max-width: 1380px) {
+  .management-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 860px) {
   .hero {
     flex-direction: column;
@@ -377,6 +522,10 @@ tbody tr.negative-row {
   }
 
   .management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-item-row {
     grid-template-columns: 1fr;
   }
 }

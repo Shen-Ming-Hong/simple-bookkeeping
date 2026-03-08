@@ -14,14 +14,14 @@
   <div class="app-shell">
     <header class="hero panel">
       <div>
-        <p class="eyebrow">Financial Planner</p>
-        <h1>記帳與一年財務預測</h1>
-        <p class="subtitle">輸入目前存款、每月定期收支與分期付款，立即看到未來每月資金走勢。</p>
-        <p class="public-note">此網站可公開分享連結使用，沒有登入保護；資料只保存在你目前使用的瀏覽器。</p>
+        <p class="eyebrow">Multi-Account Planner</p>
+        <h1>多帳戶記帳與財務預測</h1>
+        <p class="subtitle">把不同銀行帳戶視為真實錢包，安排收入、支出、分期與每月存款轉帳，直接看到總額與各帳戶未來走勢。</p>
+        <p class="public-note">資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
       </div>
       <div class="hero-badge">
-        <span>本地持久化</span>
-        <strong>localStorage</strong>
+        <span>帳戶模型</span>
+        <strong>多錢包預測</strong>
       </div>
     </header>
 
@@ -31,13 +31,13 @@
         <form id="settings-form" novalidate>
           <div class="form-grid two">
             <label>
-              目前存款（TWD）
-              <input id="initial-balance" name="initialBalance" type="number" min="0" step="1" required>
-            </label>
-            <label>
               預測月數（1-120）
               <input id="horizon-months" name="horizonMonths" type="number" min="1" max="120" step="1" required>
             </label>
+            <div class="setting-note-card">
+              <strong>資料過渡</strong>
+              <p>舊版單一存款資料會自動移到「主帳戶」，之後可再拆成多帳戶。</p>
+            </div>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">套用設定</button>
@@ -45,7 +45,7 @@
             <button type="button" class="btn btn-secondary" id="import-backup-btn">匯入備份</button>
           </div>
           <input id="import-backup-input" class="hidden" type="file" accept=".json,application/json">
-          <p class="form-note">可下載或匯入 JSON 備份檔；匯入會覆蓋現有內容，若需保留請先匯出備份。</p>
+          <p class="form-note">匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
           <p id="backup-status" class="status-message" role="alert"></p>
           <p id="settings-error" class="form-error" role="alert"></p>
         </form>
@@ -57,19 +57,111 @@
           <strong id="summary-monthly-net">$0</strong>
         </article>
         <article class="panel summary-card">
-          <p>期末餘額</p>
+          <p>期末總餘額</p>
           <strong id="summary-ending-balance">$0</strong>
         </article>
         <article class="panel summary-card">
-          <p>負餘額月數</p>
-          <strong id="summary-negative-count">0</strong>
+          <p>總餘額不足月數</p>
+          <strong id="summary-negative-total-count">0 個月</strong>
+        </article>
+        <article class="panel summary-card">
+          <p>任一帳戶不足月數</p>
+          <strong id="summary-negative-account-count">0 個月</strong>
+        </article>
+      </section>
+
+      <section class="management-grid accounts-grid">
+        <article class="panel">
+          <div class="section-title">
+            <h2>帳戶管理</h2>
+            <p>帳戶就是具名錢包，期初餘額會成為預測起點。</p>
+          </div>
+          <form id="account-form" novalidate>
+            <input type="hidden" id="account-edit-id">
+            <div class="form-grid two">
+              <label>
+                帳戶名稱
+                <input id="account-name" type="text" maxlength="30" required>
+              </label>
+              <label>
+                期初餘額（TWD）
+                <input id="account-balance" type="number" min="0" step="1" required>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="account-submit-btn">新增帳戶</button>
+              <button type="button" class="btn btn-secondary hidden" id="account-cancel-btn">取消編輯</button>
+            </div>
+            <p id="account-error" class="form-error" role="alert"></p>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名稱</th>
+                  <th>期初餘額</th>
+                  <th>已引用項目</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="account-tbody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="section-title">
+            <h2>每月存款轉帳</h2>
+            <p>固定把某帳戶的錢轉進另一個帳戶，不改變總額。</p>
+          </div>
+          <form id="transfer-form" novalidate>
+            <input type="hidden" id="transfer-edit-id">
+            <div class="form-grid two">
+              <label>
+                名稱
+                <input id="transfer-name" type="text" maxlength="40" placeholder="例如：薪轉後存旅遊帳戶" required>
+              </label>
+              <label>
+                每月金額（TWD）
+                <input id="transfer-amount" type="number" min="1" step="1" required>
+              </label>
+              <label>
+                來源帳戶
+                <select id="transfer-source-account-id" required></select>
+              </label>
+              <label>
+                目標帳戶
+                <select id="transfer-target-account-id" required></select>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="transfer-submit-btn">新增轉帳</button>
+              <button type="button" class="btn btn-secondary hidden" id="transfer-cancel-btn">取消編輯</button>
+            </div>
+            <p id="transfer-error" class="form-error" role="alert"></p>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名稱</th>
+                  <th>來源帳戶</th>
+                  <th>目標帳戶</th>
+                  <th>每月金額</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="transfer-tbody"></tbody>
+            </table>
+          </div>
         </article>
       </section>
 
       <section class="management-grid">
         <article class="panel">
           <div class="section-title">
-            <h2>定期收入（每月或每年）</h2>
+            <h2>定期收入</h2>
+            <p>收入必須指定流入哪個帳戶。</p>
           </div>
           <form id="income-form" novalidate>
             <input type="hidden" id="income-edit-id">
@@ -79,12 +171,12 @@
                 <input id="income-name" type="text" maxlength="40" required>
               </label>
               <label>
-                分類
-                <input id="income-category" type="text" maxlength="30" placeholder="例如：薪資">
-              </label>
-              <label>
                 金額（TWD）
                 <input id="income-amount" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                帳戶
+                <select id="income-account-id" required></select>
               </label>
               <label>
                 週期
@@ -118,12 +210,33 @@
             </div>
             <p id="income-error" class="form-error" role="alert"></p>
           </form>
+
+          <div id="income-batch-bar" class="batch-bar hidden">
+            <span id="income-selected-count">0 筆已選</span>
+            <div class="batch-actions">
+              <button type="button" class="btn btn-secondary" id="income-batch-btn">批次設定帳戶</button>
+              <button type="button" class="btn btn-secondary" id="income-clear-btn">清除選取</button>
+            </div>
+          </div>
+          <div id="income-batch-panel" class="batch-panel hidden">
+            <div class="section-title">
+              <h3>收入批次歸戶</h3>
+              <p>可逐筆改到不同帳戶。</p>
+            </div>
+            <div id="income-batch-list" class="batch-list"></div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="income-batch-apply-btn">套用</button>
+              <button type="button" class="btn btn-secondary" id="income-batch-cancel-btn">取消</button>
+            </div>
+          </div>
+
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
+                  <th class="checkbox-col"><input id="income-select-all" type="checkbox" aria-label="全選收入"></th>
                   <th>名稱</th>
-                  <th>分類</th>
+                  <th>帳戶</th>
                   <th>週期</th>
                   <th>金額</th>
                   <th>操作</th>
@@ -136,7 +249,8 @@
 
         <article class="panel">
           <div class="section-title">
-            <h2>定期支出（每月或每年）</h2>
+            <h2>支出規劃</h2>
+            <p>支援每月、每年固定月份與指定年月一次。</p>
           </div>
           <form id="expense-form" novalidate>
             <input type="hidden" id="expense-edit-id">
@@ -146,18 +260,19 @@
                 <input id="expense-name" type="text" maxlength="40" required>
               </label>
               <label>
-                分類
-                <input id="expense-category" type="text" maxlength="30" placeholder="例如：房租">
-              </label>
-              <label>
                 金額（TWD）
                 <input id="expense-amount" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                帳戶
+                <select id="expense-account-id" required></select>
               </label>
               <label>
                 週期
                 <select id="expense-cadence" required>
                   <option value="monthly">每月</option>
                   <option value="yearly">每年固定月份</option>
+                  <option value="one-time">指定年月一次</option>
                 </select>
               </label>
               <label id="expense-month-wrap" class="hidden">
@@ -178,6 +293,10 @@
                   <option value="12">12 月</option>
                 </select>
               </label>
+              <label id="expense-one-time-wrap" class="hidden">
+                指定年月
+                <input id="expense-one-time-month" type="month">
+              </label>
             </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary" id="expense-submit-btn">新增支出</button>
@@ -185,12 +304,33 @@
             </div>
             <p id="expense-error" class="form-error" role="alert"></p>
           </form>
+
+          <div id="expense-batch-bar" class="batch-bar hidden">
+            <span id="expense-selected-count">0 筆已選</span>
+            <div class="batch-actions">
+              <button type="button" class="btn btn-secondary" id="expense-batch-btn">批次設定帳戶</button>
+              <button type="button" class="btn btn-secondary" id="expense-clear-btn">清除選取</button>
+            </div>
+          </div>
+          <div id="expense-batch-panel" class="batch-panel hidden">
+            <div class="section-title">
+              <h3>支出批次歸戶</h3>
+              <p>可逐筆改到不同帳戶。</p>
+            </div>
+            <div id="expense-batch-list" class="batch-list"></div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="expense-batch-apply-btn">套用</button>
+              <button type="button" class="btn btn-secondary" id="expense-batch-cancel-btn">取消</button>
+            </div>
+          </div>
+
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
+                  <th class="checkbox-col"><input id="expense-select-all" type="checkbox" aria-label="全選支出"></th>
                   <th>名稱</th>
-                  <th>分類</th>
+                  <th>帳戶</th>
                   <th>週期</th>
                   <th>金額</th>
                   <th>操作</th>
@@ -202,72 +342,134 @@
         </article>
       </section>
 
-      <section class="panel">
-        <div class="section-title">
-          <h2>分期付款（每月固定，期滿自動結束）</h2>
-        </div>
-        <form id="installment-form" novalidate>
-          <input type="hidden" id="installment-edit-id">
-          <div class="form-grid three">
-            <label>
-              名稱
-              <input id="installment-name" type="text" maxlength="40" required>
-            </label>
-            <label>
-              每月金額（TWD）
-              <input id="installment-amount" type="number" min="0" step="1" required>
-            </label>
-            <label>
-              剩餘月數（1-120）
-              <input id="installment-months" type="number" min="1" max="120" step="1" required>
-            </label>
+      <section class="management-grid">
+        <article class="panel">
+          <div class="section-title">
+            <h2>分期付款</h2>
+            <p>分期視為帳戶固定支出，剩餘月數到期後自動結束。</p>
           </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary" id="installment-submit-btn">新增分期</button>
-            <button type="button" class="btn btn-secondary hidden" id="installment-cancel-btn">取消編輯</button>
+          <form id="installment-form" novalidate>
+            <input type="hidden" id="installment-edit-id">
+            <div class="form-grid two">
+              <label>
+                名稱
+                <input id="installment-name" type="text" maxlength="40" required>
+              </label>
+              <label>
+                帳戶
+                <select id="installment-account-id" required></select>
+              </label>
+              <label>
+                每月金額（TWD）
+                <input id="installment-amount" type="number" min="0" step="1" required>
+              </label>
+              <label>
+                剩餘月數（1-120）
+                <input id="installment-months" type="number" min="1" max="120" step="1" required>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="installment-submit-btn">新增分期</button>
+              <button type="button" class="btn btn-secondary hidden" id="installment-cancel-btn">取消編輯</button>
+            </div>
+            <p id="installment-error" class="form-error" role="alert"></p>
+          </form>
+
+          <div id="installment-batch-bar" class="batch-bar hidden">
+            <span id="installment-selected-count">0 筆已選</span>
+            <div class="batch-actions">
+              <button type="button" class="btn btn-secondary" id="installment-batch-btn">批次設定帳戶</button>
+              <button type="button" class="btn btn-secondary" id="installment-clear-btn">清除選取</button>
+            </div>
           </div>
-          <p id="installment-error" class="form-error" role="alert"></p>
-        </form>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>名稱</th>
-                <th>每月金額</th>
-                <th>剩餘月數</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="installment-tbody"></tbody>
-          </table>
-        </div>
+          <div id="installment-batch-panel" class="batch-panel hidden">
+            <div class="section-title">
+              <h3>分期批次歸戶</h3>
+              <p>可逐筆改到不同帳戶。</p>
+            </div>
+            <div id="installment-batch-list" class="batch-list"></div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" id="installment-batch-apply-btn">套用</button>
+              <button type="button" class="btn btn-secondary" id="installment-batch-cancel-btn">取消</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="checkbox-col"><input id="installment-select-all" type="checkbox" aria-label="全選分期"></th>
+                  <th>名稱</th>
+                  <th>帳戶</th>
+                  <th>每月金額</th>
+                  <th>剩餘月數</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="installment-tbody"></tbody>
+            </table>
+          </div>
+        </article>
       </section>
 
       <section class="panel results-panel">
         <div class="section-title">
           <h2>預測結果</h2>
-          <p>從本月起算，每月更新。</p>
+          <p>總表顯示整體現金流，明細表顯示各帳戶月底狀態。</p>
         </div>
         <div class="chart-wrap">
-          <canvas id="forecast-chart" aria-label="月末餘額趨勢圖"></canvas>
+          <canvas id="forecast-chart" aria-label="月末總餘額趨勢圖"></canvas>
         </div>
         <p id="chart-error" class="form-error" role="alert"></p>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>月份</th>
-                <th>起始餘額</th>
-                <th>定期收入</th>
-                <th>定期支出</th>
-                <th>分期支出</th>
-                <th>淨額</th>
-                <th>月末餘額</th>
-                <th>狀態</th>
-              </tr>
-            </thead>
-            <tbody id="forecast-tbody"></tbody>
-          </table>
+
+        <div class="results-stack">
+          <div>
+            <div class="subsection-title">
+              <h3>總表</h3>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>月份</th>
+                    <th>起始餘額</th>
+                    <th>收入</th>
+                    <th>支出</th>
+                    <th>分期</th>
+                    <th>淨額</th>
+                    <th>月末總餘額</th>
+                    <th>狀態</th>
+                  </tr>
+                </thead>
+                <tbody id="forecast-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <div class="subsection-title">
+              <h3>帳戶月度明細</h3>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>月份</th>
+                    <th>帳戶</th>
+                    <th>起始餘額</th>
+                    <th>收入</th>
+                    <th>支出</th>
+                    <th>分期</th>
+                    <th>轉入</th>
+                    <th>轉出</th>
+                    <th>月末餘額</th>
+                    <th>狀態</th>
+                  </tr>
+                </thead>
+                <tbody id="account-forecast-tbody"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
     </main>
