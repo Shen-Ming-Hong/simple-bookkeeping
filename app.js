@@ -143,6 +143,7 @@ function createUiState() {
 	return {
 		theme: getDocumentTheme(),
 		isSyncPopoverOpen: false,
+		expandedAccountForecastMonths: new Set(),
 	};
 }
 
@@ -487,6 +488,7 @@ function cacheDom() {
 
 	refs.forecastTbody = document.getElementById('forecast-tbody');
 	refs.accountForecastTbody = document.getElementById('account-forecast-tbody');
+	refs.accountForecastMobile = document.getElementById('account-forecast-mobile');
 	refs.chartCanvas = document.getElementById('forecast-chart');
 	refs.chartError = document.getElementById('chart-error');
 }
@@ -1058,6 +1060,7 @@ function renderAll() {
 	renderSummary(forecast);
 	renderForecastTable(forecast.totalRows);
 	renderAccountForecastTable(forecast.accountRows);
+	renderAccountForecastMobile(forecast.accountRows);
 	renderChart(forecast.totalRows);
 }
 
@@ -1565,18 +1568,19 @@ function renderForecastTable(totalRows) {
 
 	totalRows.forEach(row => {
 		const tr = document.createElement('tr');
+		tr.className = 'forecast-row';
 		if (row.status !== 'ok') {
 			tr.classList.add('warning-row');
 		}
 
-		appendCell(tr, row.monthLabel);
-		appendCell(tr, formatCurrency(row.startingBalance));
-		appendCell(tr, formatCurrency(row.income));
-		appendCell(tr, formatCurrency(row.expense));
-		appendCell(tr, formatCurrency(row.installment));
-		appendCell(tr, formatCurrency(row.net));
-		appendCell(tr, formatCurrency(row.endingBalance));
-		tr.appendChild(buildStatusCell(row.status));
+		appendCell(tr, row.monthLabel, { label: '月份', className: 'forecast-cell forecast-cell-month' });
+		appendCell(tr, formatCurrency(row.startingBalance), { label: '起始餘額', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.income), { label: '收入', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.expense), { label: '支出', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.installment), { label: '分期', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.net), { label: '淨額', className: 'forecast-cell forecast-cell-highlight' });
+		appendCell(tr, formatCurrency(row.endingBalance), { label: '月末總餘額', className: 'forecast-cell forecast-cell-highlight' });
+		tr.appendChild(buildStatusCell(row.status, { label: '狀態', className: 'forecast-cell forecast-cell-status' }));
 		refs.forecastTbody.appendChild(tr);
 	});
 }
@@ -1591,50 +1595,190 @@ function renderAccountForecastTable(accountRows) {
 
 	accountRows.forEach(row => {
 		const tr = document.createElement('tr');
+		tr.className = 'account-forecast-row';
 		if (row.status !== 'ok') {
 			tr.classList.add('warning-row');
 		}
 
-		appendCell(tr, row.monthLabel);
-		appendCell(tr, row.accountName);
-		appendCell(tr, formatCurrency(row.startingBalance));
-		appendCell(tr, formatCurrency(row.income));
-		appendCell(tr, formatCurrency(row.expense));
-		appendCell(tr, formatCurrency(row.installment));
-		appendCell(tr, formatCurrency(row.transferIn));
-		appendCell(tr, formatCurrency(row.transferOut));
-		appendCell(tr, formatCurrency(row.endingBalance));
-		tr.appendChild(buildAccountStatusCell(row));
+		appendCell(tr, row.monthLabel, { label: '月份', className: 'forecast-cell forecast-cell-month' });
+		appendCell(tr, row.accountName, { label: '帳戶', className: 'forecast-cell forecast-cell-highlight' });
+		appendCell(tr, formatCurrency(row.startingBalance), { label: '起始餘額', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.income), { label: '收入', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.expense), { label: '支出', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.installment), { label: '分期', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.transferIn), { label: '轉入', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.transferOut), { label: '轉出', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.endingBalance), { label: '月末餘額', className: 'forecast-cell forecast-cell-highlight' });
+		tr.appendChild(buildAccountStatusCell(row, { label: '狀態', className: 'forecast-cell forecast-cell-status' }));
 		refs.accountForecastTbody.appendChild(tr);
 	});
 }
 
-function buildStatusCell(status) {
-	const cell = document.createElement('td');
-	const chip = document.createElement('span');
-	chip.className = 'status-chip ok';
-
-	if (status === 'total-negative') {
-		chip.className = 'status-chip warn';
-		chip.textContent = '總額不足';
-	} else if (status === 'account-negative') {
-		chip.className = 'status-chip caution';
-		chip.textContent = '部分帳戶不足';
-	} else {
-		chip.textContent = '正常';
+function renderAccountForecastMobile(accountRows) {
+	if (!refs.accountForecastMobile) {
+		return;
 	}
+
+	refs.accountForecastMobile.replaceChildren();
+
+	if (!accountRows.length) {
+		const emptyState = document.createElement('p');
+		emptyState.className = 'mobile-forecast-empty';
+		emptyState.textContent = '尚無帳戶明細資料。';
+		refs.accountForecastMobile.appendChild(emptyState);
+		return;
+	}
+
+	const groupedRows = groupAccountForecastRowsByMonth(accountRows);
+	const expandedMonths = uiState.expandedAccountForecastMonths;
+	const shouldAutoExpandFirst = expandedMonths.size === 0;
+
+	groupedRows.forEach((group, index) => {
+		const details = document.createElement('details');
+		details.className = 'forecast-month-accordion';
+		details.open = expandedMonths.has(group.monthLabel) || (shouldAutoExpandFirst && index === 0);
+
+		const summary = document.createElement('summary');
+		summary.className = 'forecast-month-summary';
+
+		const titleWrap = document.createElement('div');
+		titleWrap.className = 'forecast-month-summary-main';
+
+		const title = document.createElement('strong');
+		title.textContent = group.monthLabel;
+		const subtitle = document.createElement('span');
+		subtitle.textContent = `${group.rows.length} 個帳戶 · 月末總額 ${formatCurrency(group.totalEndingBalance)}`;
+		titleWrap.appendChild(title);
+		titleWrap.appendChild(subtitle);
+
+		const indicator = document.createElement('div');
+		indicator.className = 'forecast-month-summary-side';
+		indicator.appendChild(createStatusChip(group.hasNegative ? 'warn' : 'ok', group.hasNegative ? '有帳戶不足' : '正常'));
+
+		summary.appendChild(titleWrap);
+		summary.appendChild(indicator);
+		details.appendChild(summary);
+
+		const cards = document.createElement('div');
+		cards.className = 'forecast-month-cards';
+
+		group.rows.forEach(row => {
+			cards.appendChild(buildMobileAccountForecastCard(row));
+		});
+
+		details.appendChild(cards);
+		details.addEventListener('toggle', () => {
+			if (details.open) {
+				expandedMonths.add(group.monthLabel);
+			} else {
+				expandedMonths.delete(group.monthLabel);
+			}
+		});
+
+		refs.accountForecastMobile.appendChild(details);
+	});
+}
+
+function groupAccountForecastRowsByMonth(accountRows) {
+	const groups = [];
+	let currentGroup = null;
+
+	accountRows.forEach(row => {
+		if (!currentGroup || currentGroup.monthLabel !== row.monthLabel) {
+			currentGroup = {
+				monthLabel: row.monthLabel,
+				rows: [],
+				totalEndingBalance: 0,
+				hasNegative: false,
+			};
+			groups.push(currentGroup);
+		}
+
+		currentGroup.rows.push(row);
+		currentGroup.totalEndingBalance += row.endingBalance;
+		currentGroup.hasNegative = currentGroup.hasNegative || row.status === 'negative';
+	});
+
+	return groups;
+}
+
+function buildMobileAccountForecastCard(row) {
+	const card = document.createElement('article');
+	card.className = 'forecast-account-card';
+	if (row.status === 'negative') {
+		card.classList.add('is-warning');
+	}
+
+	const header = document.createElement('div');
+	header.className = 'forecast-account-card-header';
+
+	const title = document.createElement('strong');
+	title.textContent = row.accountName;
+	header.appendChild(title);
+	header.appendChild(createStatusChip(row.status === 'negative' ? 'warn' : 'ok', row.status === 'negative' ? '帳戶不足' : '正常'));
+
+	const grid = document.createElement('div');
+	grid.className = 'forecast-account-grid';
+	const fields = [
+		['起始餘額', formatCurrency(row.startingBalance)],
+		['收入', formatCurrency(row.income)],
+		['支出', formatCurrency(row.expense)],
+		['分期', formatCurrency(row.installment)],
+		['轉入', formatCurrency(row.transferIn)],
+		['轉出', formatCurrency(row.transferOut)],
+		['月末餘額', formatCurrency(row.endingBalance)],
+	];
+
+	fields.forEach(([label, value]) => {
+		const pair = document.createElement('div');
+		pair.className = 'forecast-account-pair';
+
+		const pairLabel = document.createElement('span');
+		pairLabel.className = 'forecast-account-pair-label';
+		pairLabel.textContent = label;
+
+		const pairValue = document.createElement('strong');
+		pairValue.className = 'forecast-account-pair-value';
+		pairValue.textContent = value;
+
+		pair.appendChild(pairLabel);
+		pair.appendChild(pairValue);
+		grid.appendChild(pair);
+	});
+
+	card.appendChild(header);
+	card.appendChild(grid);
+	return card;
+}
+
+
+function buildStatusCell(status, options = {}) {
+	const cell = document.createElement('td');
+	applyCellMeta(cell, options);
+	const chip =
+		status === 'total-negative'
+			? createStatusChip('warn', '總額不足')
+			: status === 'account-negative'
+				? createStatusChip('caution', '部分帳戶不足')
+				: createStatusChip('ok', '正常');
 
 	cell.appendChild(chip);
 	return cell;
 }
 
-function buildAccountStatusCell(row) {
+function buildAccountStatusCell(row, options = {}) {
 	const cell = document.createElement('td');
-	const chip = document.createElement('span');
-	chip.className = row.status === 'negative' ? 'status-chip warn' : 'status-chip ok';
-	chip.textContent = row.status === 'negative' ? '帳戶不足' : '正常';
+	applyCellMeta(cell, options);
+	const chip = createStatusChip(row.status === 'negative' ? 'warn' : 'ok', row.status === 'negative' ? '帳戶不足' : '正常');
 	cell.appendChild(chip);
 	return cell;
+}
+
+function createStatusChip(tone, text) {
+	const chip = document.createElement('span');
+	chip.className = `status-chip ${tone}`;
+	chip.textContent = text;
+	return chip;
 }
 
 function renderChart(totalRows) {
@@ -1903,11 +2047,26 @@ function formatCadence(item) {
 	return '未知';
 }
 
-function appendCell(row, content) {
+function appendCell(row, content, options = {}) {
 	const cell = document.createElement('td');
+	applyCellMeta(cell, options);
 	cell.textContent = content;
 	row.appendChild(cell);
 	return cell;
+}
+
+function applyCellMeta(cell, options = {}) {
+	if (!cell || !options) {
+		return;
+	}
+
+	if (options.label) {
+		cell.dataset.label = options.label;
+	}
+
+	if (options.className) {
+		cell.className = options.className;
+	}
 }
 
 function appendEmptyRow(tbody, colspan, message) {
