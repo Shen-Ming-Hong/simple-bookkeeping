@@ -247,6 +247,145 @@ select:focus {
   font-size: 0.9rem;
 }
 
+.sync-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #cfe0e7;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.1), transparent 36%),
+    linear-gradient(180deg, rgba(248, 252, 254, 0.96), rgba(240, 247, 249, 0.96));
+}
+
+.sync-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.sync-eyebrow {
+  margin: 0 0 6px;
+  color: var(--brand);
+  font-family: "Manrope", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sync-panel-header h3 {
+  margin: 0;
+  font-family: "Manrope", sans-serif;
+  font-size: 1.08rem;
+}
+
+.sync-badge {
+  min-width: 160px;
+  padding: 12px 14px;
+  border: 1px solid rgba(17, 94, 89, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.sync-badge span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.sync-badge strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--brand-strong);
+  font-family: "Manrope", sans-serif;
+  font-size: 1rem;
+}
+
+.sync-overview {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1.1fr) minmax(0, 1.4fr);
+  gap: 14px;
+}
+
+.sync-connection-card,
+.sync-metric-card {
+  border: 1px solid rgba(183, 204, 214, 0.9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(8px);
+}
+
+.sync-connection-card {
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.sync-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sync-connection-card strong {
+  display: block;
+  font-family: "Manrope", sans-serif;
+  font-size: 1.22rem;
+  line-height: 1.2;
+}
+
+.sync-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sync-metric-card {
+  padding: 16px;
+}
+
+.sync-metric-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.sync-metric-card strong {
+  display: block;
+  margin-top: 10px;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.98rem;
+  line-height: 1.35;
+  color: var(--text-main);
+}
+
+.sync-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sync-note {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.sync-note code {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--brand-strong);
+  font-family: "Manrope", monospace;
+  font-size: 0.84rem;
+}
+
 .status-message {
   margin: 8px 0 0;
   min-height: 1.2em;
@@ -514,6 +653,23 @@ tbody tr.warning-row {
 @media (max-width: 860px) {
   .hero {
     flex-direction: column;
+  }
+
+  .sync-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sync-badge {
+    min-width: 0;
+  }
+
+  .sync-metrics {
+    grid-template-columns: 1fr;
   }
 
   .app-shell {

@@ -12,6 +12,14 @@ const APP_ID = "accounting_forecast";
 const BACKUP_FILENAME_PREFIX = "accounting-backup";
 const MAIN_ACCOUNT_NAME = "主帳戶";
 const BATCH_TYPES = ["income", "expense", "installment"];
+const SYNC_META_STORAGE_KEY = "accounting_forecast_sync_meta_v1";
+const GOOGLE_CLIENT_ID_META_NAME = "google-client-id";
+const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+const GOOGLE_DRIVE_FILE_NAME = "accounting_forecast.json";
+const GOOGLE_DRIVE_API_URL = "https://www.googleapis.com/drive/v3/files";
+const GOOGLE_DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files";
+const SYNC_UPLOAD_DEBOUNCE_MS = 1200;
+const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
 const LEGACY_BACKUP_DATA_KEYS = [
   "schemaVersion",
   "initialBalance",
@@ -38,9 +46,11 @@ const CURRENT_BACKUP_DATA_KEYS = [
 
 let state = createDefaultState();
 let forecastChart = null;
+let syncUploadTimer = null;
 
 const refs = {};
 const batchState = createBatchState();
+const syncState = createSyncState();
 
 if (typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", () => {
@@ -50,6 +60,7 @@ if (typeof document !== "undefined") {
     refreshStaticAccountSelects();
     resetAllForms();
     renderAll();
+    void initializeCloudSync();
   });
 }
 
@@ -84,6 +95,37 @@ function createDefaultState() {
   };
 }
 
+function createDefaultSyncMeta() {
+  return {
+    lastSyncedAt: "",
+    lastKnownCloudUpdatedAt: "",
+    lastKnownCloudFileId: "",
+    syncStatus: "local-only",
+    pendingUpload: false,
+    lastAuthAttemptAt: "",
+  };
+}
+
+function createSyncState() {
+  return {
+    meta: createDefaultSyncMeta(),
+    clientId: "",
+    isConfigured: false,
+    isGoogleReady: false,
+    tokenClient: null,
+    accessToken: "",
+    accessTokenExpiresAt: 0,
+    isConnected: false,
+    isAuthorizing: false,
+    isSyncing: false,
+    hasSessionChanges: false,
+    hadLocalDataAtStartup: false,
+    statusCode: "local-only",
+    statusMessage: "目前使用本機資料。",
+    statusTone: "info",
+  };
+}
+
 function createAccount(name, initialBalance) {
   return {
     id: makeId(),
@@ -93,6 +135,7 @@ function createAccount(name, initialBalance) {
 }
 
 function cacheDom() {
+  refs.googleIdentityScript = document.getElementById("google-identity-script");
   refs.settingsForm = document.getElementById("settings-form");
   refs.horizonMonths = document.getElementById("horizon-months");
   refs.exportBackupBtn = document.getElementById("export-backup-btn");
@@ -100,6 +143,16 @@ function cacheDom() {
   refs.importBackupInput = document.getElementById("import-backup-input");
   refs.backupStatus = document.getElementById("backup-status");
   refs.settingsError = document.getElementById("settings-error");
+  refs.syncPanelTitle = document.getElementById("sync-panel-title");
+  refs.syncConnectionStatus = document.getElementById("sync-connection-status");
+  refs.syncStatusMessage = document.getElementById("sync-status-message");
+  refs.syncLocalUpdatedAt = document.getElementById("sync-local-updated-at");
+  refs.syncCloudUpdatedAt = document.getElementById("sync-cloud-updated-at");
+  refs.syncLastSyncedAt = document.getElementById("sync-last-synced-at");
+  refs.syncConnectBtn = document.getElementById("sync-connect-btn");
+  refs.syncUploadBtn = document.getElementById("sync-upload-btn");
+  refs.syncDownloadBtn = document.getElementById("sync-download-btn");
+  refs.syncDisconnectBtn = document.getElementById("sync-disconnect-btn");
 
   refs.summaryMonthlyNet = document.getElementById("summary-monthly-net");
   refs.summaryEndingBalance = document.getElementById("summary-ending-balance");
@@ -203,6 +256,18 @@ function bindEvents() {
   refs.exportBackupBtn.addEventListener("click", downloadJsonBackup);
   refs.importBackupBtn.addEventListener("click", triggerImportBackup);
   refs.importBackupInput.addEventListener("change", handleImportBackup);
+  refs.syncConnectBtn.addEventListener("click", () => {
+    void connectGoogleDrive();
+  });
+  refs.syncUploadBtn.addEventListener("click", () => {
+    void uploadToGoogleDrive();
+  });
+  refs.syncDownloadBtn.addEventListener("click", () => {
+    void syncFromGoogleDrive();
+  });
+  refs.syncDisconnectBtn.addEventListener("click", () => {
+    void disconnectGoogleDrive();
+  });
 
   refs.accountForm.addEventListener("submit", onAccountSubmit);
   refs.accountCancelBtn.addEventListener("click", resetAccountForm);
@@ -759,6 +824,7 @@ function renderAll() {
   state = sanitizeState(state);
   refreshStaticAccountSelects();
   renderSettings();
+  renderSyncPanel();
   renderAccountTable();
   renderTransferTable();
   renderIncomeTable();
@@ -774,6 +840,39 @@ function renderAll() {
 
 function renderSettings() {
   refs.horizonMonths.value = state.horizonMonths;
+}
+
+function renderSyncPanel() {
+  if (!refs.syncConnectionStatus) {
+    return;
+  }
+
+  refs.syncPanelTitle.textContent = syncState.isConfigured
+    ? "Google Drive 同步"
+    : "Google Drive 同步（未設定）";
+  refs.syncConnectionStatus.textContent = getSyncConnectionLabel();
+  refs.syncLocalUpdatedAt.textContent = formatSyncTimestamp(state.updatedAt);
+  refs.syncCloudUpdatedAt.textContent = formatSyncTimestamp(syncState.meta.lastKnownCloudUpdatedAt);
+  refs.syncLastSyncedAt.textContent = formatSyncTimestamp(syncState.meta.lastSyncedAt);
+  setStatusMessage(refs.syncStatusMessage, syncState.statusMessage, syncState.statusTone);
+
+  const allowManualSync =
+    syncState.isConfigured &&
+    syncState.isGoogleReady &&
+    !syncState.isAuthorizing &&
+    !syncState.isSyncing;
+
+  refs.syncConnectBtn.disabled =
+    !syncState.isConfigured || !syncState.isGoogleReady || syncState.isAuthorizing || syncState.isSyncing;
+  refs.syncUploadBtn.disabled = !allowManualSync;
+  refs.syncDownloadBtn.disabled = !allowManualSync;
+  refs.syncDisconnectBtn.disabled =
+    !syncState.isConfigured ||
+    syncState.isAuthorizing ||
+    syncState.isSyncing ||
+    (!syncState.isConnected && !syncState.accessToken);
+
+  refs.syncConnectBtn.textContent = syncState.isConnected ? "重新授權" : "連接 Google Drive";
 }
 
 function renderAccountTable() {
@@ -1535,6 +1634,18 @@ function formatMonth(date) {
   return `${date.getFullYear()}/${padDatePart(date.getMonth() + 1)}`;
 }
 
+function formatSyncTimestamp(value) {
+  const timeValue = parseTimestamp(value);
+  if (!timeValue) {
+    return "尚無資料";
+  }
+
+  return new Intl.DateTimeFormat(state.locale || DEFAULT_LOCALE, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timeValue));
+}
+
 function formatCurrency(amount) {
   const formatter = new Intl.NumberFormat(state.locale || DEFAULT_LOCALE, {
     style: "currency",
@@ -1635,6 +1746,19 @@ function normalizeRequiredText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseTimestamp(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function compareUpdatedAt(left, right) {
+  return parseTimestamp(left) - parseTimestamp(right);
+}
+
 function makeId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -1661,11 +1785,28 @@ function setStatusMessage(node, message, status) {
   if (node.classList) {
     node.classList.toggle("is-error", status === "error");
     node.classList.toggle("is-success", status === "success");
+    node.classList.toggle("is-info", status === "info");
   }
 }
 
 function clearStatusMessage(node) {
   setStatusMessage(node, "", "");
+}
+
+function getSyncConnectionLabel() {
+  if (!syncState.isConfigured) {
+    return "尚未設定 Client ID";
+  }
+  if (syncState.isAuthorizing) {
+    return "驗證中";
+  }
+  if (syncState.isSyncing) {
+    return "同步中";
+  }
+  if (syncState.isConnected) {
+    return "已連接 Google Drive";
+  }
+  return "本機模式";
 }
 
 function clearSectionError(node) {
@@ -1869,6 +2010,14 @@ function applyImportedState(importedState) {
   persistAndRender();
 }
 
+function applySyncedState(nextState) {
+  state = sanitizeState(nextState);
+  clearTransientUiState();
+  resetAllForms();
+  persistState();
+  renderAll();
+}
+
 function getImportErrorMessage(error) {
   return error instanceof Error ? error.message : "匯入備份時發生未知錯誤。";
 }
@@ -1890,6 +2039,7 @@ function persistAndRender() {
   state = sanitizeState(state);
   state.updatedAt = new Date().toISOString();
   persistState();
+  handleLocalStateMutation();
   renderAll();
 }
 
@@ -1909,10 +2059,12 @@ function persistMigratedState(nextState) {
 
 function loadState() {
   if (typeof localStorage === "undefined") {
+    syncState.hadLocalDataAtStartup = false;
     return createDefaultState();
   }
 
   const raw = localStorage.getItem(STORAGE_KEY);
+  syncState.hadLocalDataAtStartup = Boolean(raw);
   if (!raw) {
     return createDefaultState();
   }
@@ -2492,4 +2644,800 @@ function clearTransientUiState() {
 
 function isDuplicateAccountName(name, excludeId) {
   return state.accounts.some((account) => account.id !== excludeId && account.name === name);
+}
+
+function loadSyncMeta() {
+  if (typeof localStorage === "undefined") {
+    return createDefaultSyncMeta();
+  }
+
+  const raw = localStorage.getItem(SYNC_META_STORAGE_KEY);
+  if (!raw) {
+    return createDefaultSyncMeta();
+  }
+
+  try {
+    return sanitizeSyncMeta(JSON.parse(raw));
+  } catch (error) {
+    return createDefaultSyncMeta();
+  }
+}
+
+function sanitizeSyncMeta(input) {
+  const source = input || {};
+  return {
+    lastSyncedAt:
+      typeof source.lastSyncedAt === "string" && source.lastSyncedAt.trim()
+        ? source.lastSyncedAt
+        : "",
+    lastKnownCloudUpdatedAt:
+      typeof source.lastKnownCloudUpdatedAt === "string" && source.lastKnownCloudUpdatedAt.trim()
+        ? source.lastKnownCloudUpdatedAt
+        : "",
+    lastKnownCloudFileId:
+      typeof source.lastKnownCloudFileId === "string" && source.lastKnownCloudFileId.trim()
+        ? source.lastKnownCloudFileId
+        : "",
+    syncStatus:
+      typeof source.syncStatus === "string" && source.syncStatus.trim()
+        ? source.syncStatus
+        : "local-only",
+    pendingUpload: Boolean(source.pendingUpload),
+    lastAuthAttemptAt:
+      typeof source.lastAuthAttemptAt === "string" && source.lastAuthAttemptAt.trim()
+        ? source.lastAuthAttemptAt
+        : "",
+  };
+}
+
+function persistSyncMeta() {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(SYNC_META_STORAGE_KEY, JSON.stringify(syncState.meta));
+}
+
+function updateSyncMeta(patch, options = {}) {
+  syncState.meta = sanitizeSyncMeta({
+    ...syncState.meta,
+    ...patch,
+  });
+  persistSyncMeta();
+  if (options.render !== false) {
+    renderSyncPanel();
+  }
+}
+
+async function initializeCloudSync() {
+  syncState.meta = loadSyncMeta();
+  syncState.clientId = resolveGoogleClientId();
+  syncState.isConfigured = Boolean(syncState.clientId);
+
+  if (!syncState.isConfigured) {
+    setSyncFeedback(
+      "not-configured",
+      "尚未設定 Google Client ID，雲端同步目前停用。",
+      "info"
+    );
+    return;
+  }
+
+  if (isGoogleIdentityReady()) {
+    await handleGoogleIdentityScriptReady();
+    return;
+  }
+
+  if (!refs.googleIdentityScript) {
+    setSyncFeedback(
+      "gis-missing",
+      "找不到 Google Identity Services 腳本，無法啟用雲端同步。",
+      "error"
+    );
+    return;
+  }
+
+  setSyncFeedback("gis-loading", "正在初始化 Google Drive 同步...", "info");
+  refs.googleIdentityScript.addEventListener(
+    "load",
+    () => {
+      void handleGoogleIdentityScriptReady();
+    },
+    { once: true }
+  );
+  refs.googleIdentityScript.addEventListener(
+    "error",
+    () => {
+      setSyncFeedback(
+        "gis-error",
+        "Google Identity Services 載入失敗，請稍後再試。",
+        "error"
+      );
+    },
+    { once: true }
+  );
+}
+
+async function handleGoogleIdentityScriptReady() {
+  try {
+    setupGoogleTokenClient();
+    setSyncFeedback("auth-check", "正在檢查 Google Drive 連線狀態...", "info");
+    const authorized = await ensureDriveAuthorization({ interactive: false });
+    if (!authorized) {
+      return;
+    }
+    await synchronizeCloudState({ reason: "startup" });
+  } catch (error) {
+    setSyncFeedback("gis-error", getSyncFriendlyErrorMessage(error), "error");
+  }
+}
+
+function resolveGoogleClientId() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+
+  const meta = document.querySelector(`meta[name="${GOOGLE_CLIENT_ID_META_NAME}"]`);
+  return meta && typeof meta.content === "string" ? meta.content.trim() : "";
+}
+
+function isGoogleIdentityReady() {
+  return Boolean(window.google?.accounts?.oauth2);
+}
+
+function setupGoogleTokenClient() {
+  if (!isGoogleIdentityReady()) {
+    throw new Error("Google Identity Services 尚未就緒。");
+  }
+
+  syncState.isGoogleReady = true;
+  syncState.tokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: syncState.clientId,
+    scope: GOOGLE_DRIVE_SCOPE,
+    callback: () => {},
+    error_callback: () => {},
+  });
+}
+
+async function connectGoogleDrive() {
+  if (!(await ensureDriveAuthorization({ interactive: true }))) {
+    return;
+  }
+
+  await synchronizeCloudState({ reason: "manual-connect" });
+}
+
+async function uploadToGoogleDrive() {
+  if (!(await ensureDriveAuthorization({ interactive: true }))) {
+    return;
+  }
+
+  await synchronizeCloudState({ forceUpload: true, reason: "manual-upload" });
+}
+
+async function syncFromGoogleDrive() {
+  if (!(await ensureDriveAuthorization({ interactive: true }))) {
+    return;
+  }
+
+  await synchronizeCloudState({ forceDownload: true, reason: "manual-download" });
+}
+
+async function disconnectGoogleDrive() {
+  if (!syncState.isConfigured) {
+    return;
+  }
+
+  const confirmed =
+    typeof window === "undefined" || typeof window.confirm !== "function"
+      ? true
+      : window.confirm("確定中斷 Google Drive 連線嗎？本機資料會保留。");
+  if (!confirmed) {
+    return;
+  }
+
+  if (syncUploadTimer) {
+    window.clearTimeout(syncUploadTimer);
+    syncUploadTimer = null;
+  }
+
+  syncState.isAuthorizing = true;
+  renderSyncPanel();
+
+  try {
+    if (syncState.accessToken && window.google?.accounts?.oauth2?.revoke) {
+      await new Promise((resolve) => {
+        window.google.accounts.oauth2.revoke(syncState.accessToken, () => {
+          resolve();
+        });
+      });
+    }
+  } finally {
+    clearDriveAccessToken();
+    syncState.isConnected = false;
+    syncState.isAuthorizing = false;
+    syncState.hasSessionChanges = false;
+    syncState.meta = createDefaultSyncMeta();
+    persistSyncMeta();
+    setSyncFeedback(
+      "local-only",
+      "已中斷 Google Drive 連線，本機資料仍可繼續使用。",
+      "info",
+      { persistStatus: false }
+    );
+  }
+}
+
+async function ensureDriveAuthorization(options = {}) {
+  const interactive = Boolean(options.interactive);
+  if (!syncState.isConfigured) {
+    setSyncFeedback(
+      "not-configured",
+      "尚未設定 Google Client ID，雲端同步目前停用。",
+      "info"
+    );
+    return false;
+  }
+  if (!syncState.isGoogleReady || !syncState.tokenClient) {
+    setSyncFeedback("gis-loading", "Google Drive 同步仍在初始化，請稍後再試。", "info");
+    return false;
+  }
+  if (hasValidDriveAccessToken()) {
+    syncState.isConnected = true;
+    renderSyncPanel();
+    return true;
+  }
+
+  const prompt = interactive ? "select_account" : "none";
+  updateSyncMeta(
+    {
+      lastAuthAttemptAt: new Date().toISOString(),
+    },
+    { render: false }
+  );
+
+  try {
+    const tokenResponse = await requestGoogleAccessToken(prompt);
+    syncState.accessToken = tokenResponse.access_token;
+    syncState.accessTokenExpiresAt =
+      Date.now() + Math.max(0, Number(tokenResponse.expires_in) || 0) * 1000;
+    syncState.isConnected = true;
+    setSyncFeedback("connected", "已連接 Google Drive。", "success");
+    return true;
+  } catch (error) {
+    clearDriveAccessToken();
+    syncState.isConnected = false;
+    if (interactive) {
+      setSyncFeedback("auth-required", getSyncFriendlyErrorMessage(error), "error");
+    } else if (syncState.meta.pendingUpload) {
+      setSyncFeedback(
+        "pending-auth",
+        "本機有尚未同步的資料，請連接 Google Drive 後續傳。",
+        "info"
+      );
+    } else {
+      setSyncFeedback("local-only", "目前使用本機資料，可隨時連接 Google Drive。", "info");
+    }
+    return false;
+  }
+}
+
+function hasValidDriveAccessToken() {
+  return Boolean(
+    syncState.accessToken &&
+      syncState.accessTokenExpiresAt &&
+      Date.now() < syncState.accessTokenExpiresAt - ACCESS_TOKEN_EXPIRY_BUFFER_MS
+  );
+}
+
+function clearDriveAccessToken() {
+  syncState.accessToken = "";
+  syncState.accessTokenExpiresAt = 0;
+}
+
+function requestGoogleAccessToken(promptValue) {
+  return new Promise((resolve, reject) => {
+    if (!syncState.tokenClient) {
+      reject(new Error("Google Token Client 尚未初始化。"));
+      return;
+    }
+
+    syncState.isAuthorizing = true;
+    renderSyncPanel();
+
+    syncState.tokenClient.callback = (response) => {
+      syncState.isAuthorizing = false;
+      renderSyncPanel();
+      if (response && !response.error && response.access_token) {
+        resolve(response);
+        return;
+      }
+
+      const error = new Error(
+        response?.error_description || response?.error || "Google 授權失敗。"
+      );
+      error.code = response?.error || "";
+      reject(error);
+    };
+
+    syncState.tokenClient.error_callback = (error) => {
+      syncState.isAuthorizing = false;
+      renderSyncPanel();
+      const nextError =
+        error instanceof Error ? error : new Error(error?.type || "Google 授權失敗。");
+      nextError.code = error?.type || "";
+      reject(nextError);
+    };
+
+    syncState.tokenClient.requestAccessToken({
+      prompt: promptValue,
+    });
+  });
+}
+
+function setSyncFeedback(statusCode, message, tone, options = {}) {
+  syncState.statusCode = statusCode;
+  syncState.statusMessage = message;
+  syncState.statusTone = tone;
+  if (options.persistStatus !== false) {
+    updateSyncMeta(
+      {
+        syncStatus: statusCode,
+      },
+      { render: false }
+    );
+  }
+  if (options.render !== false) {
+    renderSyncPanel();
+  }
+}
+
+async function synchronizeCloudState(options = {}) {
+  const forceDownload = Boolean(options.forceDownload);
+  const forceUpload = Boolean(options.forceUpload);
+
+  if (syncState.isSyncing) {
+    return false;
+  }
+
+  syncState.isSyncing = true;
+  setSyncFeedback("syncing", "正在與 Google Drive 同步...", "info", {
+    render: false,
+  });
+  renderSyncPanel();
+
+  try {
+    const cloudFile = await getCloudFileMetadata();
+
+    if (!cloudFile) {
+      updateSyncMeta(
+        {
+          lastKnownCloudFileId: "",
+          lastKnownCloudUpdatedAt: "",
+        },
+        { render: false }
+      );
+
+      if (forceDownload) {
+        setSyncFeedback("cloud-empty", "Google Drive 尚無可下載的資料。", "info");
+        return false;
+      }
+
+      if (
+        forceUpload ||
+        shouldCreateCloudFileOnFirstSync() ||
+        syncState.hasSessionChanges ||
+        syncState.meta.pendingUpload
+      ) {
+        await uploadLocalStateToCloud({ reason: options.reason || "sync", createIfMissing: true });
+        return true;
+      }
+
+      setSyncFeedback("cloud-empty", "Google Drive 尚無資料，本機仍可正常使用。", "info");
+      return false;
+    }
+
+    updateSyncMeta(
+      {
+        lastKnownCloudFileId: cloudFile.id,
+        lastKnownCloudUpdatedAt: cloudFile.updatedAt,
+      },
+      { render: false }
+    );
+
+    if (
+      !syncState.hadLocalDataAtStartup &&
+      !syncState.hasSessionChanges &&
+      !syncState.meta.pendingUpload &&
+      !forceUpload
+    ) {
+      await applyCloudStateFromDrive(cloudFile);
+      return true;
+    }
+
+    if (
+      forceUpload &&
+      compareUpdatedAt(cloudFile.updatedAt, state.updatedAt) > 0 &&
+      typeof window !== "undefined" &&
+      typeof window.confirm === "function"
+    ) {
+      const confirmed = window.confirm("雲端資料時間較新，仍要用本機資料覆蓋雲端嗎？");
+      if (!confirmed) {
+        setSyncFeedback("upload-cancelled", "已取消上傳到 Google Drive。", "info");
+        return false;
+      }
+    }
+
+    if (
+      forceDownload &&
+      compareUpdatedAt(state.updatedAt, cloudFile.updatedAt) > 0 &&
+      typeof window !== "undefined" &&
+      typeof window.confirm === "function"
+    ) {
+      const confirmed = window.confirm("本機資料時間較新，仍要用雲端資料覆蓋本機嗎？");
+      if (!confirmed) {
+        setSyncFeedback("download-cancelled", "已取消從 Google Drive 覆蓋本機資料。", "info");
+        return false;
+      }
+    }
+
+    if (forceUpload) {
+      await uploadLocalStateToCloud({
+        fileId: cloudFile.id,
+        reason: options.reason || "manual-upload",
+      });
+      return true;
+    }
+
+    if (forceDownload) {
+      await applyCloudStateFromDrive(cloudFile);
+      return true;
+    }
+
+    const comparison = compareUpdatedAt(cloudFile.updatedAt, state.updatedAt);
+    if (comparison > 0) {
+      await applyCloudStateFromDrive(cloudFile);
+      return true;
+    }
+
+    if (comparison < 0) {
+      if (syncState.hasSessionChanges || syncState.meta.pendingUpload) {
+        await uploadLocalStateToCloud({
+          fileId: cloudFile.id,
+          reason: options.reason || "pending-upload",
+        });
+        return true;
+      }
+
+      setSyncFeedback("local-newer", "本機資料較新，尚未推送到雲端。", "info");
+      return false;
+    }
+
+    syncState.hasSessionChanges = false;
+    updateSyncMeta(
+      {
+        lastSyncedAt: new Date().toISOString(),
+        pendingUpload: false,
+        syncStatus: "synced",
+      },
+      { render: false }
+    );
+    setSyncFeedback("synced", "本機與 Google Drive 已同步。", "success");
+    return true;
+  } catch (error) {
+    setSyncFeedback("sync-error", getSyncFriendlyErrorMessage(error), "error");
+    return false;
+  } finally {
+    syncState.isSyncing = false;
+    renderSyncPanel();
+    maybeContinuePendingCloudUpload();
+  }
+}
+
+async function getCloudFileMetadata() {
+  const params = new URLSearchParams({
+    spaces: "appDataFolder",
+    pageSize: "1",
+    orderBy: "modifiedTime desc",
+    fields: "files(id,name,modifiedTime,appProperties)",
+    q: `name='${GOOGLE_DRIVE_FILE_NAME}' and 'appDataFolder' in parents and trashed=false`,
+  });
+  const payload = await driveRequestJson(`${GOOGLE_DRIVE_API_URL}?${params.toString()}`);
+  const firstFile = Array.isArray(payload.files) ? payload.files[0] : null;
+  return firstFile ? normalizeCloudFileMetadata(firstFile) : null;
+}
+
+function normalizeCloudFileMetadata(file) {
+  const appUpdatedAt =
+    typeof file?.appProperties?.updatedAt === "string" ? file.appProperties.updatedAt : "";
+  return {
+    id: typeof file?.id === "string" ? file.id : "",
+    updatedAt: appUpdatedAt || file?.modifiedTime || "",
+    modifiedTime: typeof file?.modifiedTime === "string" ? file.modifiedTime : "",
+  };
+}
+
+async function fetchCloudStatePayload(fileId) {
+  const response = await driveRequest(`${GOOGLE_DRIVE_API_URL}/${encodeURIComponent(fileId)}?alt=media`);
+  return response.json();
+}
+
+async function applyCloudStateFromDrive(file) {
+  const payload = await fetchCloudStatePayload(file.id);
+  const nextState = validateImportPayload(payload);
+  applySyncedState(nextState);
+  syncState.hasSessionChanges = false;
+  updateSyncMeta(
+    {
+      lastKnownCloudFileId: file.id,
+      lastKnownCloudUpdatedAt: nextState.updatedAt,
+      lastSyncedAt: new Date().toISOString(),
+      pendingUpload: false,
+      syncStatus: "cloud-applied",
+    },
+    { render: false }
+  );
+  setSyncFeedback("cloud-applied", "已套用 Google Drive 上較新的資料。", "success");
+}
+
+async function uploadLocalStateToCloud(options = {}) {
+  const payload = buildExportPayload();
+  const fileId = options.fileId || syncState.meta.lastKnownCloudFileId || "";
+  const uploadedUpdatedAt = payload.updatedAt;
+  const metadata = buildDriveFileMetadata(uploadedUpdatedAt, !fileId);
+  const boundary = `batch_${makeId()}`;
+  const url = fileId
+    ? `${GOOGLE_DRIVE_UPLOAD_URL}/${encodeURIComponent(
+        fileId
+      )}?uploadType=multipart&fields=id,modifiedTime,appProperties`
+    : `${GOOGLE_DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id,modifiedTime,appProperties`;
+
+  try {
+    const response = await driveRequestJson(url, {
+      method: fileId ? "PATCH" : "POST",
+      headers: {
+        "Content-Type": `multipart/related; boundary=${boundary}`,
+      },
+      body: buildDriveMultipartBody(boundary, metadata, payload),
+    });
+    const cloudFile = normalizeCloudFileMetadata(response);
+    const unchangedDuringUpload = state.updatedAt === uploadedUpdatedAt;
+    syncState.hasSessionChanges = !unchangedDuringUpload;
+    updateSyncMeta(
+      {
+        lastKnownCloudFileId: cloudFile.id,
+        lastKnownCloudUpdatedAt: uploadedUpdatedAt,
+        lastSyncedAt: new Date().toISOString(),
+        pendingUpload: !unchangedDuringUpload,
+        syncStatus: unchangedDuringUpload ? "synced" : "pending-upload",
+      },
+      { render: false }
+    );
+    setSyncFeedback(
+      unchangedDuringUpload ? "synced" : "pending-upload",
+      unchangedDuringUpload
+        ? "已將本機資料同步到 Google Drive。"
+        : "本機仍有新變更，已排入下一次自動上傳。",
+      unchangedDuringUpload ? "success" : "info"
+    );
+
+    if (!unchangedDuringUpload) {
+      scheduleCloudUpload();
+    }
+
+    return cloudFile;
+  } catch (error) {
+    if (fileId && error?.statusCode === 404) {
+      updateSyncMeta(
+        {
+          lastKnownCloudFileId: "",
+          lastKnownCloudUpdatedAt: "",
+        },
+        { render: false }
+      );
+      return uploadLocalStateToCloud({
+        ...options,
+        fileId: "",
+      });
+    }
+    throw error;
+  }
+}
+
+function shouldCreateCloudFileOnFirstSync() {
+  return (
+    !syncState.hadLocalDataAtStartup &&
+    !syncState.hasSessionChanges &&
+    !syncState.meta.pendingUpload
+  );
+}
+
+function buildDriveFileMetadata(updatedAt, includeParent) {
+  const metadata = {
+    name: GOOGLE_DRIVE_FILE_NAME,
+    mimeType: "application/json",
+    appProperties: {
+      appId: APP_ID,
+      updatedAt,
+    },
+  };
+
+  if (includeParent) {
+    metadata.parents = ["appDataFolder"];
+  }
+
+  return metadata;
+}
+
+function buildDriveMultipartBody(boundary, metadata, payload) {
+  return [
+    `--${boundary}\r\n`,
+    "Content-Type: application/json; charset=UTF-8\r\n\r\n",
+    JSON.stringify(metadata),
+    "\r\n",
+    `--${boundary}\r\n`,
+    "Content-Type: application/json; charset=UTF-8\r\n\r\n",
+    JSON.stringify(payload),
+    "\r\n",
+    `--${boundary}--`,
+  ].join("");
+}
+
+async function driveRequestJson(url, options = {}) {
+  const response = await driveRequest(url, options);
+  if (response.status === 204) {
+    return {};
+  }
+  return response.json();
+}
+
+async function driveRequest(url, options = {}) {
+  if (!syncState.accessToken) {
+    throw new Error("尚未取得 Google 授權。");
+  }
+
+  const headers = new Headers(options.headers || {});
+  headers.set("Authorization", `Bearer ${syncState.accessToken}`);
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    handleDriveAuthFailure();
+    const error = new Error("Google 授權已失效，請重新連接。");
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  if (!response.ok) {
+    throw await parseDriveError(response);
+  }
+
+  return response;
+}
+
+async function parseDriveError(response) {
+  let message = `Google Drive 同步失敗（${response.status}）。`;
+
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error?.message === "string" && payload.error.message.trim()) {
+      message = payload.error.message.trim();
+    }
+  } catch (error) {
+    // Keep the fallback message when the response body is not JSON.
+  }
+
+  const nextError = new Error(message);
+  nextError.statusCode = response.status;
+  return nextError;
+}
+
+function handleDriveAuthFailure() {
+  clearDriveAccessToken();
+  syncState.isConnected = false;
+  updateSyncMeta(
+    {
+      pendingUpload: syncState.meta.pendingUpload || syncState.hasSessionChanges,
+      syncStatus: "auth-required",
+    },
+    { render: false }
+  );
+  setSyncFeedback("auth-required", "Google 授權已失效，請重新連接。", "error");
+}
+
+function handleLocalStateMutation() {
+  if (!syncState.isConfigured) {
+    return;
+  }
+
+  syncState.hasSessionChanges = true;
+  updateSyncMeta(
+    {
+      pendingUpload: true,
+      syncStatus: "pending-upload",
+    },
+    { render: false }
+  );
+
+  if (syncState.isGoogleReady) {
+    setSyncFeedback("pending-upload", "本機資料已更新，將自動同步到 Google Drive。", "info");
+    scheduleCloudUpload();
+    return;
+  }
+
+  setSyncFeedback("pending-upload", "本機資料已更新，待 Google Drive 同步初始化後續傳。", "info");
+}
+
+function scheduleCloudUpload() {
+  if (!syncState.isConfigured) {
+    return;
+  }
+
+  if (syncUploadTimer) {
+    window.clearTimeout(syncUploadTimer);
+  }
+
+  syncUploadTimer = window.setTimeout(() => {
+    syncUploadTimer = null;
+    void runScheduledCloudUpload();
+  }, SYNC_UPLOAD_DEBOUNCE_MS);
+}
+
+async function runScheduledCloudUpload() {
+  if (!syncState.isConfigured || syncState.isSyncing || syncState.isAuthorizing) {
+    scheduleCloudUpload();
+    return;
+  }
+
+  if (!(await ensureDriveAuthorization({ interactive: false }))) {
+    updateSyncMeta(
+      {
+        pendingUpload: true,
+      },
+      { render: false }
+    );
+    return;
+  }
+
+  try {
+    await uploadLocalStateToCloud({
+      reason: "auto-upload",
+    });
+  } catch (error) {
+    setSyncFeedback("sync-error", getSyncFriendlyErrorMessage(error), "error");
+  }
+}
+
+function maybeContinuePendingCloudUpload() {
+  if (
+    syncState.meta.pendingUpload &&
+    syncState.isConfigured &&
+    !syncState.isSyncing &&
+    !syncState.isAuthorizing
+  ) {
+    scheduleCloudUpload();
+  }
+}
+
+function getSyncFriendlyErrorMessage(error) {
+  const message = error instanceof Error ? error.message : "";
+  if (!message) {
+    return "Google Drive 同步失敗。";
+  }
+  if (error?.statusCode === 404) {
+    return "Google Drive 上找不到同步檔案，請重新上傳。";
+  }
+  if (message.includes("popup_closed")) {
+    return "你已取消 Google 授權。";
+  }
+  if (message.includes("popup_failed_to_open")) {
+    return "Google 授權視窗無法開啟，請確認瀏覽器未封鎖彈窗。";
+  }
+  if (message.includes("immediate_failed")) {
+    return "目前無法自動恢復 Google 授權，可手動連接後再同步。";
+  }
+  return message;
 }

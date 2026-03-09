@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
+  <meta name="google-client-id" content="128255319615-dpfi3ui7mngusuk19bqdfj4t410fhcc4.apps.googleusercontent.com">
   <title>記帳與財務預測</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,6 +50,55 @@
           <p id="backup-status" class="status-message" role="alert"></p>
           <p id="settings-error" class="form-error" role="alert"></p>
         </form>
+
+        <section class="sync-panel" aria-labelledby="sync-panel-title">
+          <div class="sync-panel-header">
+            <div>
+              <p class="sync-eyebrow">Google Drive</p>
+              <h3 id="sync-panel-title">本機快取 + 雲端同步</h3>
+            </div>
+            <div class="sync-badge">
+              <span>雲端位置</span>
+              <strong>appDataFolder</strong>
+            </div>
+          </div>
+
+          <div class="sync-overview">
+            <div class="sync-connection-card">
+              <p class="sync-label">連線狀態</p>
+              <strong id="sync-connection-status">尚未連接 Google Drive</strong>
+              <p id="sync-status-message" class="status-message is-info" role="status" aria-live="polite">
+                頁面會先讀本機快取，再嘗試背景同步。
+              </p>
+            </div>
+
+            <div class="sync-metrics" role="list" aria-label="同步時間資訊">
+              <article class="sync-metric-card" role="listitem">
+                <p>本機資料時間</p>
+                <strong id="sync-local-updated-at">尚未讀取</strong>
+              </article>
+              <article class="sync-metric-card" role="listitem">
+                <p>雲端資料時間</p>
+                <strong id="sync-cloud-updated-at">尚未連接</strong>
+              </article>
+              <article class="sync-metric-card" role="listitem">
+                <p>最後同步時間</p>
+                <strong id="sync-last-synced-at">尚未同步</strong>
+              </article>
+            </div>
+          </div>
+
+          <div class="sync-actions" aria-label="同步操作">
+            <button type="button" class="btn btn-primary" id="sync-connect-btn">連接 Google Drive</button>
+            <button type="button" class="btn btn-secondary" id="sync-upload-btn">立即上傳</button>
+            <button type="button" class="btn btn-secondary" id="sync-download-btn">從雲端同步</button>
+            <button type="button" class="btn btn-secondary" id="sync-disconnect-btn">中斷連線</button>
+          </div>
+
+          <p class="sync-note">
+            需先在頁面 head 的 <code>google-client-id</code> meta 填入 Google OAuth Web Client ID，才能啟用 Drive 同步。
+          </p>
+        </section>
       </section>
 
       <section class="summary-grid">
@@ -475,6 +525,7 @@
     </main>
   </div>
 
+  <script id="google-identity-script" src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="app.js" defer></script>
 </body>

@@ -14,6 +14,7 @@
 - 支援收入、支出、分期的批次勾選歸戶
 - 顯示總表與帳戶月度明細表，並提供總餘額趨勢圖
 - 匯出與匯入 JSON 備份，支援舊版資料自動轉換
+- 可選擇連接 Google Drive `appDataFolder` 做背景同步，保留本機快取作為快速啟動來源
 
 ## 使用方式
 
@@ -33,11 +34,27 @@
 
 ## 資料儲存方式
 
-- 資料只存在當前瀏覽器的 `localStorage`
-- 不會上傳到伺服器
-- 不同裝置或不同瀏覽器之間不會自動同步
-- 清除瀏覽器資料後，本機內容會消失
-- 若要跨裝置搬移資料，請使用 JSON 備份匯出與匯入
+- 預設資料會先保存在當前瀏覽器的 `localStorage`
+- 若有設定並授權 Google Drive，頁面會在背景把資料同步到使用者自己的 `appDataFolder`
+- 啟動時會先載入本機快取，再嘗試背景比對雲端資料
+- 雲端資料時間比本機新時，會自動把雲端資料同步回本機
+- 本機資料時間比雲端新時，不會在啟動當下直接覆蓋雲端；後續變更或手動上傳才會推送
+- 不會上傳到自家伺服器，Drive 同步直接由瀏覽器呼叫 Google API
+- 清除瀏覽器資料後，本機快取會消失；若先前已有同步到 Drive，重新連線後仍可拉回資料
+- 若要跨裝置搬移資料，也可繼續使用 JSON 備份匯出與匯入
+
+## Google Drive 同步設定
+
+1. 在 Google Cloud Console 建立 OAuth 2.0 Web Client。
+2. 把網站網址加入 Authorized JavaScript origins。
+3. 將 [index.html](/E:/記帳/index.html) 內的 `<meta name="google-client-id" content="">` 填入你的 Client ID。
+4. 重新部署後，使用者可在頁面中點擊「連接 Google Drive」完成授權。
+
+### 同步說明
+
+- 同步檔案會儲存在 Google Drive 的 `appDataFolder`，不會出現在一般 Drive 檔案列表
+- Access token 只保存在瀏覽器記憶體，不會寫進 `localStorage`
+- 若 Google 授權失效，頁面仍可繼續使用本機快取，重新連線後再恢復同步
 
 ## 注意事項
 

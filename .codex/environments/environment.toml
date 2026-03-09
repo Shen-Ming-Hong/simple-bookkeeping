@@ -8,7 +8,4 @@ script = ""
 [[actions]]
 name = "執行"
 icon = "run"
-command = '''
-cd E:\記帳
-start .\index.html
-'''
+command = "python -m http.server 5500"
