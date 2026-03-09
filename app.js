@@ -1751,7 +1751,6 @@ function buildMobileAccountForecastCard(row) {
 	return card;
 }
 
-
 function buildStatusCell(status, options = {}) {
 	const cell = document.createElement('td');
 	applyCellMeta(cell, options);

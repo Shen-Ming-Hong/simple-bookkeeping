@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant" data-theme="light">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -20,9 +21,12 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <div class="app-shell">
     <header class="hero panel">
@@ -43,14 +47,8 @@
         <div class="settings-panel-top">
           <h2>預測設定</h2>
           <div class="settings-utility-bar" role="group" aria-label="介面工具">
-            <button
-              type="button"
-              class="icon-btn theme-toggle-btn"
-              id="theme-toggle-btn"
-              aria-label="切換為暗色主題"
-              title="切換為暗色主題"
-              aria-pressed="false"
-            >
+            <button type="button" class="icon-btn theme-toggle-btn" id="theme-toggle-btn" aria-label="切換為暗色主題"
+              title="切換為暗色主題" aria-pressed="false">
               <span class="theme-icon icon-sun" aria-hidden="true">
                 <svg viewBox="0 0 24 24" class="toolbar-icon">
                   <circle cx="12" cy="12" r="4"></circle>
@@ -66,38 +64,28 @@
               </span>
               <span class="theme-icon icon-moon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" class="toolbar-icon">
-                  <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"></path>
+                  <path
+                    d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401">
+                  </path>
                 </svg>
               </span>
               <span class="sr-only">切換主題</span>
             </button>
             <div class="sync-utility" id="sync-utility">
-              <button
-                type="button"
-                class="icon-btn sync-toggle-btn"
-                id="sync-toggle-btn"
-                aria-haspopup="dialog"
-                aria-expanded="false"
-                aria-controls="sync-popover"
-                aria-label="開啟雲端同步面板"
-                title="開啟雲端同步面板"
-              >
+              <button type="button" class="icon-btn sync-toggle-btn" id="sync-toggle-btn" aria-haspopup="dialog"
+                aria-expanded="false" aria-controls="sync-popover" aria-label="開啟雲端同步面板" title="開啟雲端同步面板">
                 <svg viewBox="0 0 24 24" class="toolbar-icon" aria-hidden="true">
-                  <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path>
+                  <path
+                    d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915">
+                  </path>
                   <circle cx="12" cy="12" r="3"></circle>
                 </svg>
                 <span id="sync-status-dot" class="sync-status-dot" data-sync-tone="neutral" aria-hidden="true"></span>
                 <span class="sr-only">開啟雲端同步面板</span>
               </button>
 
-              <section
-                id="sync-popover"
-                class="sync-popover hidden"
-                role="dialog"
-                aria-modal="false"
-                aria-labelledby="sync-panel-title"
-                tabindex="-1"
-              >
+              <section id="sync-popover" class="sync-popover hidden" role="dialog" aria-modal="false"
+                aria-labelledby="sync-panel-title" tabindex="-1">
                 <div class="sync-panel-header">
                   <div>
                     <p class="sync-eyebrow">Google Drive</p>
@@ -600,4 +588,5 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="app.js" defer></script>
 </body>
+
 </html>
