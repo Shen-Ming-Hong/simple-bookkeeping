@@ -5,6 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
+  <meta name="application-name" content="記帳與財務預測">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="記帳與財務預測">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#f2f6f8">
   <meta name="google-client-id" content="128255319615-dpfi3ui7mngusuk19bqdfj4t410fhcc4.apps.googleusercontent.com">
   <title>記帳與財務預測</title>
   <meta name="description" content="多帳戶記帳與財務預測工具，整理收入、支出、分期與每月轉帳，直接預估未來現金流與各帳戶餘額。">
@@ -24,15 +30,24 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
   <link rel="shortcut icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
   <script>
     (function () {
       var storageKey = "accounting_forecast_theme_v1";
+      var themeColors = {
+        light: "#f2f6f8",
+        dark: "#09131f"
+      };
       var root = document.documentElement;
+      var themeColorMeta = document.querySelector('meta[name="theme-color"]');
       try {
         var savedTheme = localStorage.getItem(storageKey);
         root.dataset.theme = savedTheme === "dark" ? "dark" : "light";
       } catch (error) {
         root.dataset.theme = "light";
+      }
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute("content", themeColors[root.dataset.theme] || themeColors.light);
       }
     }());
   </script>
@@ -602,7 +617,7 @@
   </div>
 
   <script id="google-identity-script" src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="vendor/chart.umd.min.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 

@@ -1,0 +1,39 @@
+{
+  "id": "./",
+  "name": "記帳與財務預測",
+  "short_name": "記帳預測",
+  "description": "多帳戶記帳與財務預測工具，整理收入、支出、分期與每月轉帳，直接預估未來現金流與各帳戶餘額。",
+  "lang": "zh-Hant",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f6f8",
+  "theme_color": "#f2f6f8",
+  "icons": [
+    {
+      "src": "./pwa-icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pwa-icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pwa-icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./pwa-icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -17,6 +17,9 @@ const DRIVE_SESSION_STORAGE_KEY = 'accounting_forecast_drive_session_v1';
 const THEME_STORAGE_KEY = 'accounting_forecast_theme_v1';
 const THEME_LIGHT = 'light';
 const THEME_DARK = 'dark';
+const THEME_COLOR_META_NAME = 'theme-color';
+const LIGHT_THEME_COLOR = '#f2f6f8';
+const DARK_THEME_COLOR = '#09131f';
 const GOOGLE_CLIENT_ID_META_NAME = 'google-client-id';
 const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const GOOGLE_DRIVE_FILE_NAME = 'accounting_forecast.json';
@@ -24,6 +27,7 @@ const GOOGLE_DRIVE_API_URL = 'https://www.googleapis.com/drive/v3/files';
 const GOOGLE_DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 const SYNC_UPLOAD_DEBOUNCE_MS = 1200;
 const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
+const SERVICE_WORKER_SCRIPT_URL = './service-worker.js';
 const LEGACY_BACKUP_DATA_KEYS = [
 	'schemaVersion',
 	'initialBalance',
@@ -66,6 +70,7 @@ if (typeof document !== 'undefined') {
 		refreshStaticAccountSelects();
 		resetAllForms();
 		renderAll();
+		registerServiceWorker();
 		void initializeCloudSync();
 	});
 }
@@ -125,12 +130,14 @@ function createSyncState() {
 		clientId: '',
 		isConfigured: false,
 		isGoogleReady: false,
+		hasGoogleScriptListeners: false,
 		tokenClient: null,
 		accessToken: '',
 		accessTokenExpiresAt: 0,
 		isConnected: false,
 		isAuthorizing: false,
 		isSyncing: false,
+		isNetworkOnline: isBrowserOnline(),
 		hasSessionChanges: false,
 		hadLocalDataAtStartup: false,
 		statusCode: 'local-only',
@@ -149,6 +156,14 @@ function createUiState() {
 
 function sanitizeTheme(value) {
 	return value === THEME_DARK ? THEME_DARK : THEME_LIGHT;
+}
+
+function isBrowserOnline() {
+	if (typeof navigator === 'undefined' || typeof navigator.onLine !== 'boolean') {
+		return true;
+	}
+
+	return navigator.onLine;
 }
 
 function getDocumentTheme() {
@@ -187,6 +202,21 @@ function buildThemeToggleLabel(theme = uiState.theme) {
 	return sanitizeTheme(theme) === THEME_DARK ? '切換為亮色主題' : '切換為暗色主題';
 }
 
+function getThemeColor(theme = uiState.theme) {
+	return sanitizeTheme(theme) === THEME_DARK ? DARK_THEME_COLOR : LIGHT_THEME_COLOR;
+}
+
+function updateThemeColorMeta(theme = uiState.theme) {
+	if (typeof document === 'undefined') {
+		return;
+	}
+
+	const themeColorMeta = document.querySelector(`meta[name="${THEME_COLOR_META_NAME}"]`);
+	if (themeColorMeta) {
+		themeColorMeta.setAttribute('content', getThemeColor(theme));
+	}
+}
+
 function renderThemeToggle() {
 	if (!refs.themeToggleBtn) {
 		return;
@@ -208,6 +238,7 @@ function applyTheme(nextTheme, options = {}) {
 	if (typeof document !== 'undefined') {
 		document.documentElement.dataset.theme = theme;
 	}
+	updateThemeColorMeta(theme);
 	if (persist) {
 		persistThemePreference(theme);
 	}
@@ -514,6 +545,10 @@ function bindEvents() {
 	});
 	document.addEventListener('pointerdown', handleDocumentPointerDown);
 	document.addEventListener('keydown', handleGlobalKeydown);
+	if (typeof window !== 'undefined') {
+		window.addEventListener('online', handleBrowserOnline);
+		window.addEventListener('offline', handleBrowserOffline);
+	}
 
 	refs.accountForm.addEventListener('submit', onAccountSubmit);
 	refs.accountCancelBtn.addEventListener('click', resetAccountForm);
@@ -538,6 +573,72 @@ function bindEvents() {
 	bindBatchEvents('income');
 	bindBatchEvents('expense');
 	bindBatchEvents('installment');
+}
+
+function registerServiceWorker() {
+	if (typeof window === 'undefined' || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+		return;
+	}
+
+	window.addEventListener(
+		'load',
+		() => {
+			void navigator.serviceWorker.register(SERVICE_WORKER_SCRIPT_URL).catch(() => {});
+		},
+		{ once: true }
+	);
+}
+
+function buildOfflineSyncMessage() {
+	return syncState.meta.pendingUpload
+		? '目前離線，本機資料會在恢復連線後再同步到 Google Drive。'
+		: '目前離線，仍可使用本機資料。';
+}
+
+function handleBrowserOnline() {
+	syncState.isNetworkOnline = true;
+
+	if (!syncState.isConfigured) {
+		renderSyncPanel();
+		return;
+	}
+
+	if (!syncState.isGoogleReady) {
+		void initializeCloudSync();
+		return;
+	}
+
+	if (syncState.meta.pendingUpload) {
+		setSyncFeedback('pending-upload', '已恢復連線，本機資料將自動同步到 Google Drive。', 'info', {
+			persistStatus: false,
+		});
+		maybeContinuePendingCloudUpload();
+		return;
+	}
+
+	if (syncState.isConnected || hasValidDriveAccessToken()) {
+		setSyncFeedback('connected', '已恢復連線，可繼續與 Google Drive 同步。', 'success', {
+			persistStatus: false,
+		});
+		return;
+	}
+
+	setSyncFeedback('local-only', '已恢復連線，可隨時連接 Google Drive。', 'info', {
+		persistStatus: false,
+	});
+}
+
+function handleBrowserOffline() {
+	syncState.isNetworkOnline = false;
+
+	if (!syncState.isConfigured) {
+		renderSyncPanel();
+		return;
+	}
+
+	setSyncFeedback('offline', buildOfflineSyncMessage(), 'info', {
+		persistStatus: false,
+	});
 }
 
 function bindBatchEvents(type) {
@@ -1082,13 +1183,19 @@ function renderSyncPanel() {
 	refs.syncLastSyncedAt.textContent = formatSyncTimestamp(syncState.meta.lastSyncedAt);
 	setStatusMessage(refs.syncStatusMessage, syncState.statusMessage, syncState.statusTone);
 
-	const allowManualSync = syncState.isConfigured && syncState.isGoogleReady && !syncState.isAuthorizing && !syncState.isSyncing;
+	const allowManualSync =
+		syncState.isNetworkOnline && syncState.isConfigured && syncState.isGoogleReady && !syncState.isAuthorizing && !syncState.isSyncing;
 
-	refs.syncConnectBtn.disabled = !syncState.isConfigured || !syncState.isGoogleReady || syncState.isAuthorizing || syncState.isSyncing;
+	refs.syncConnectBtn.disabled =
+		!syncState.isNetworkOnline || !syncState.isConfigured || !syncState.isGoogleReady || syncState.isAuthorizing || syncState.isSyncing;
 	refs.syncUploadBtn.disabled = !allowManualSync;
 	refs.syncDownloadBtn.disabled = !allowManualSync;
 	refs.syncDisconnectBtn.disabled =
-		!syncState.isConfigured || syncState.isAuthorizing || syncState.isSyncing || (!syncState.isConnected && !syncState.accessToken);
+		!syncState.isNetworkOnline ||
+		!syncState.isConfigured ||
+		syncState.isAuthorizing ||
+		syncState.isSyncing ||
+		(!syncState.isConnected && !syncState.accessToken);
 
 	refs.syncConnectBtn.textContent = syncState.isConnected ? '重新授權' : '連接 Google Drive';
 	renderSyncIndicator();
@@ -2186,6 +2293,9 @@ function getSyncConnectionLabel() {
 	if (!syncState.isConfigured) {
 		return '尚未設定 Client ID';
 	}
+	if (!syncState.isNetworkOnline) {
+		return '離線中';
+	}
 	if (syncState.isAuthorizing) {
 		return '驗證中';
 	}
@@ -3136,9 +3246,17 @@ async function initializeCloudSync() {
 	syncState.meta = loadSyncMeta();
 	syncState.clientId = resolveGoogleClientId();
 	syncState.isConfigured = Boolean(syncState.clientId);
+	syncState.isNetworkOnline = isBrowserOnline();
 
 	if (!syncState.isConfigured) {
 		setSyncFeedback('not-configured', '尚未設定 Google Client ID，雲端同步目前停用。', 'info');
+		return;
+	}
+
+	if (!syncState.isNetworkOnline) {
+		setSyncFeedback('offline', buildOfflineSyncMessage(), 'info', {
+			persistStatus: false,
+		});
 		return;
 	}
 
@@ -3152,10 +3270,19 @@ async function initializeCloudSync() {
 		return;
 	}
 
+	if (syncState.hasGoogleScriptListeners) {
+		setSyncFeedback('gis-loading', '正在初始化 Google Drive 同步...', 'info', {
+			persistStatus: false,
+		});
+		return;
+	}
+
+	syncState.hasGoogleScriptListeners = true;
 	setSyncFeedback('gis-loading', '正在初始化 Google Drive 同步...', 'info');
 	refs.googleIdentityScript.addEventListener(
 		'load',
 		() => {
+			syncState.hasGoogleScriptListeners = false;
 			void handleGoogleIdentityScriptReady();
 		},
 		{ once: true }
@@ -3163,6 +3290,7 @@ async function initializeCloudSync() {
 	refs.googleIdentityScript.addEventListener(
 		'error',
 		() => {
+			syncState.hasGoogleScriptListeners = false;
 			setSyncFeedback('gis-error', 'Google Identity Services 載入失敗，請稍後再試。', 'error');
 		},
 		{ once: true }
@@ -3287,6 +3415,13 @@ async function ensureDriveAuthorization(options = {}) {
 		setSyncFeedback('not-configured', '尚未設定 Google Client ID，雲端同步目前停用。', 'info');
 		return false;
 	}
+	syncState.isNetworkOnline = isBrowserOnline();
+	if (!syncState.isNetworkOnline) {
+		setSyncFeedback('offline', buildOfflineSyncMessage(), 'info', {
+			persistStatus: false,
+		});
+		return false;
+	}
 	if (!syncState.isGoogleReady || !syncState.tokenClient) {
 		setSyncFeedback('gis-loading', 'Google Drive 同步仍在初始化，請稍後再試。', 'info');
 		return false;
@@ -3399,7 +3534,14 @@ async function synchronizeCloudState(options = {}) {
 	const forceDownload = Boolean(options.forceDownload);
 	const forceUpload = Boolean(options.forceUpload);
 
+	syncState.isNetworkOnline = isBrowserOnline();
 	if (syncState.isSyncing) {
+		return false;
+	}
+	if (!syncState.isNetworkOnline) {
+		setSyncFeedback('offline', buildOfflineSyncMessage(), 'info', {
+			persistStatus: false,
+		});
 		return false;
 	}
 
@@ -3679,6 +3821,10 @@ async function driveRequest(url, options = {}) {
 	if (!syncState.accessToken) {
 		throw new Error('尚未取得 Google 授權。');
 	}
+	syncState.isNetworkOnline = isBrowserOnline();
+	if (!syncState.isNetworkOnline) {
+		throw createOfflineSyncError();
+	}
 
 	const headers = new Headers(options.headers || {});
 	headers.set('Authorization', `Bearer ${syncState.accessToken}`);
@@ -3736,6 +3882,7 @@ function handleLocalStateMutation() {
 	if (!syncState.isConfigured) {
 		return;
 	}
+	syncState.isNetworkOnline = isBrowserOnline();
 
 	syncState.hasSessionChanges = true;
 	updateSyncMeta(
@@ -3745,6 +3892,13 @@ function handleLocalStateMutation() {
 		},
 		{ render: false }
 	);
+
+	if (!syncState.isNetworkOnline) {
+		setSyncFeedback('offline', buildOfflineSyncMessage(), 'info', {
+			persistStatus: false,
+		});
+		return;
+	}
 
 	if (syncState.isGoogleReady) {
 		setSyncFeedback('pending-upload', '本機資料已更新，將自動同步到 Google Drive。', 'info');
@@ -3756,7 +3910,8 @@ function handleLocalStateMutation() {
 }
 
 function scheduleCloudUpload() {
-	if (!syncState.isConfigured) {
+	syncState.isNetworkOnline = isBrowserOnline();
+	if (!syncState.isConfigured || !syncState.isNetworkOnline) {
 		return;
 	}
 
@@ -3771,7 +3926,12 @@ function scheduleCloudUpload() {
 }
 
 async function runScheduledCloudUpload() {
-	if (!syncState.isConfigured || syncState.isSyncing || syncState.isAuthorizing) {
+	syncState.isNetworkOnline = isBrowserOnline();
+	if (!syncState.isConfigured || !syncState.isNetworkOnline) {
+		return;
+	}
+
+	if (syncState.isSyncing || syncState.isAuthorizing) {
 		scheduleCloudUpload();
 		return;
 	}
@@ -3796,13 +3956,17 @@ async function runScheduledCloudUpload() {
 }
 
 function maybeContinuePendingCloudUpload() {
-	if (syncState.meta.pendingUpload && syncState.isConfigured && !syncState.isSyncing && !syncState.isAuthorizing) {
+	syncState.isNetworkOnline = isBrowserOnline();
+	if (syncState.meta.pendingUpload && syncState.isConfigured && syncState.isNetworkOnline && !syncState.isSyncing && !syncState.isAuthorizing) {
 		scheduleCloudUpload();
 	}
 }
 
 function getSyncFriendlyErrorMessage(error) {
 	const message = error instanceof Error ? error.message : '';
+	if (!syncState.isNetworkOnline || message.includes('Failed to fetch') || message.includes('NetworkError')) {
+		return '目前離線，恢復連線後可再同步 Google Drive。';
+	}
 	if (!message) {
 		return 'Google Drive 同步失敗。';
 	}
@@ -3819,4 +3983,10 @@ function getSyncFriendlyErrorMessage(error) {
 		return '目前無法自動恢復 Google 授權，可手動連接後再同步。';
 	}
 	return message;
+}
+
+function createOfflineSyncError() {
+	const error = new Error('目前離線，恢復連線後可再同步 Google Drive。');
+	error.code = 'offline';
+	return error;
 }
