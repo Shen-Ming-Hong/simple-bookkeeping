@@ -13,18 +13,18 @@
   <meta name="theme-color" content="#f2f6f8">
   <meta name="google-client-id" content="128255319615-dpfi3ui7mngusuk19bqdfj4t410fhcc4.apps.googleusercontent.com">
   <title>記帳與財務預測</title>
-  <meta name="description" content="多帳戶記帳與財務預測工具，整理收入、支出、分期與每月轉帳，直接預估未來現金流與各帳戶餘額。">
+<meta name="description" content="多帳戶記帳與財務預測工具，整理收入、支出、分期與固定或指定月份轉帳，直接預估未來現金流與各帳戶餘額。">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="zh_TW">
   <meta property="og:title" content="記帳與財務預測">
-  <meta property="og:description" content="多帳戶記帳與財務預測工具，整理收入、支出、分期與每月轉帳，直接預估未來現金流與各帳戶餘額。">
+<meta property="og:description" content="多帳戶記帳與財務預測工具，整理收入、支出、分期與固定或指定月份轉帳，直接預估未來現金流與各帳戶餘額。">
   <meta property="og:url" content="https://money.esperar.org/">
   <meta property="og:image" content="https://money.esperar.org/og-image.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="記帳與財務預測">
-  <meta name="twitter:description" content="多帳戶記帳與財務預測工具，整理收入、支出、分期與每月轉帳，直接預估未來現金流與各帳戶餘額。">
+<meta name="twitter:description" content="多帳戶記帳與財務預測工具，整理收入、支出、分期與固定或指定月份轉帳，直接預估未來現金流與各帳戶餘額。">
   <meta name="twitter:image" content="https://money.esperar.org/og-image.jpg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
@@ -65,7 +65,7 @@
       <div>
         <p class="eyebrow">Multi-Account Planner</p>
         <h1>多帳戶記帳與財務預測</h1>
-        <p class="subtitle">把不同銀行帳戶視為真實錢包，安排收入、支出、分期與每月存款轉帳，直接看到總額與各帳戶未來走勢。</p>
+          <p class="subtitle">把不同銀行帳戶視為真實錢包，安排收入、支出、分期與固定或指定月份轉帳，直接看到總額與各帳戶未來走勢。</p>
         <p class="public-note desktop-note">資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
         <details class="compact-disclosure mobile-only-disclosure">
           <summary>資料提醒</summary>
@@ -267,7 +267,7 @@
 
         <article class="panel">
           <div class="section-title">
-            <h2>每月存款轉帳</h2>
+            <h2>固定每月轉帳</h2>
             <p>固定把某帳戶的錢轉進另一個帳戶，不改變總額。</p>
           </div>
           <form id="transfer-form" novalidate>
@@ -291,7 +291,7 @@
               </label>
             </div>
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary" id="transfer-submit-btn">新增轉帳</button>
+              <button type="submit" class="btn btn-primary" id="transfer-submit-btn">新增固定轉帳</button>
               <button type="button" class="btn btn-secondary hidden" id="transfer-cancel-btn">取消編輯</button>
             </div>
             <p id="transfer-error" class="form-error" role="alert"></p>
@@ -308,6 +308,58 @@
                 </tr>
               </thead>
               <tbody id="transfer-tbody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="section-title">
+            <h2>指定月份轉帳</h2>
+            <p>針對單一月份安排一次轉帳，適合每月金額不固定的資金調度。</p>
+          </div>
+          <form id="scheduled-transfer-form" novalidate>
+            <input type="hidden" id="scheduled-transfer-edit-id">
+            <div class="form-grid two">
+              <label>
+                名稱
+                <input id="scheduled-transfer-name" type="text" maxlength="40" placeholder="例如：3 月補存旅遊帳戶" required>
+              </label>
+              <label>
+                金額（TWD）
+                <input id="scheduled-transfer-amount" type="number" min="1" step="1" required>
+              </label>
+              <label>
+                年月
+                <input id="scheduled-transfer-month" type="month" required>
+              </label>
+              <label>
+                來源帳戶
+                <select id="scheduled-transfer-source-account-id" required></select>
+              </label>
+              <label>
+                目標帳戶
+                <select id="scheduled-transfer-target-account-id" required></select>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="scheduled-transfer-submit-btn">新增指定月份轉帳</button>
+              <button type="button" class="btn btn-secondary hidden" id="scheduled-transfer-cancel-btn">取消編輯</button>
+            </div>
+            <p id="scheduled-transfer-error" class="form-error" role="alert"></p>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名稱</th>
+                  <th>年月</th>
+                  <th>來源帳戶</th>
+                  <th>目標帳戶</th>
+                  <th>金額</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="scheduled-transfer-tbody"></tbody>
             </table>
           </div>
         </article>
@@ -615,9 +667,9 @@
                     <th>帳戶</th>
                     <th>起始餘額</th>
                     <th>收入</th>
+                    <th>轉入</th>
                     <th>支出</th>
                     <th>分期</th>
-                    <th>轉入</th>
                     <th>轉出</th>
                     <th>月末餘額</th>
                     <th>狀態</th>

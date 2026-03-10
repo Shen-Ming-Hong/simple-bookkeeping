@@ -1,6 +1,7 @@
 const STORAGE_KEY = 'accounting_forecast_v1';
-const SCHEMA_VERSION = 3;
-const EXPORT_VERSION = 2;
+const SCHEMA_VERSION = 4;
+const EXPORT_VERSION = 3;
+const PREVIOUS_EXPORT_VERSION = 2;
 const LEGACY_EXPORT_VERSION = 1;
 const MAX_MONTHS = 120;
 const DEFAULT_CURRENCY = 'TWD';
@@ -47,6 +48,7 @@ const CURRENT_BACKUP_DATA_KEYS = [
 	'recurringExpenses',
 	'installments',
 	'monthlyTransfers',
+	'scheduledTransfers',
 	'currency',
 	'locale',
 	'updatedAt',
@@ -100,6 +102,7 @@ function createDefaultState() {
 		recurringExpenses: [],
 		installments: [],
 		monthlyTransfers: [],
+		scheduledTransfers: [],
 		currency: DEFAULT_CURRENCY,
 		locale: DEFAULT_LOCALE,
 		updatedAt: new Date().toISOString(),
@@ -519,6 +522,18 @@ function cacheDom() {
 	refs.transferError = document.getElementById('transfer-error');
 	refs.transferTbody = document.getElementById('transfer-tbody');
 
+	refs.scheduledTransferForm = document.getElementById('scheduled-transfer-form');
+	refs.scheduledTransferEditId = document.getElementById('scheduled-transfer-edit-id');
+	refs.scheduledTransferName = document.getElementById('scheduled-transfer-name');
+	refs.scheduledTransferAmount = document.getElementById('scheduled-transfer-amount');
+	refs.scheduledTransferMonth = document.getElementById('scheduled-transfer-month');
+	refs.scheduledTransferSourceAccountId = document.getElementById('scheduled-transfer-source-account-id');
+	refs.scheduledTransferTargetAccountId = document.getElementById('scheduled-transfer-target-account-id');
+	refs.scheduledTransferSubmitBtn = document.getElementById('scheduled-transfer-submit-btn');
+	refs.scheduledTransferCancelBtn = document.getElementById('scheduled-transfer-cancel-btn');
+	refs.scheduledTransferError = document.getElementById('scheduled-transfer-error');
+	refs.scheduledTransferTbody = document.getElementById('scheduled-transfer-tbody');
+
 	refs.forecastTbody = document.getElementById('forecast-tbody');
 	refs.accountForecastTbody = document.getElementById('account-forecast-tbody');
 	refs.forecastMobile = document.getElementById('forecast-mobile');
@@ -572,6 +587,12 @@ function bindEvents() {
 	refs.transferCancelBtn.addEventListener('click', resetTransferForm);
 	refs.transferSourceAccountId.addEventListener('change', () => {
 		syncTransferTargetSelection();
+	});
+
+	refs.scheduledTransferForm.addEventListener('submit', onScheduledTransferSubmit);
+	refs.scheduledTransferCancelBtn.addEventListener('click', resetScheduledTransferForm);
+	refs.scheduledTransferSourceAccountId.addEventListener('change', () => {
+		syncScheduledTransferTargetSelection();
 	});
 
 	bindBatchEvents('income');
@@ -699,6 +720,7 @@ function resetAllForms() {
 	resetExpenseForm();
 	resetInstallmentForm();
 	resetTransferForm();
+	resetScheduledTransferForm();
 }
 
 function refreshStaticAccountSelects() {
@@ -707,7 +729,12 @@ function refreshStaticAccountSelects() {
 	setAccountSelectOptions(refs.expenseAccountId, getValidAccountId(refs.expenseAccountId.value) || defaultAccountId);
 	setAccountSelectOptions(refs.installmentAccountId, getValidAccountId(refs.installmentAccountId.value) || defaultAccountId);
 	setAccountSelectOptions(refs.transferSourceAccountId, getValidAccountId(refs.transferSourceAccountId.value) || defaultAccountId);
+	setAccountSelectOptions(
+		refs.scheduledTransferSourceAccountId,
+		getValidAccountId(refs.scheduledTransferSourceAccountId.value) || defaultAccountId
+	);
 	syncTransferTargetSelection(refs.transferTargetAccountId.value);
+	syncScheduledTransferTargetSelection(refs.scheduledTransferTargetAccountId.value);
 }
 
 function setAccountSelectOptions(selectElement, preferredValue) {
@@ -729,36 +756,48 @@ function setAccountSelectOptions(selectElement, preferredValue) {
 }
 
 function syncTransferTargetSelection(preferredTargetId) {
-	if (!refs.transferSourceAccountId || !refs.transferTargetAccountId) {
+	syncTransferTargetSelectionFor(refs.transferSourceAccountId, refs.transferTargetAccountId, preferredTargetId);
+}
+
+function syncScheduledTransferTargetSelection(preferredTargetId) {
+	syncTransferTargetSelectionFor(
+		refs.scheduledTransferSourceAccountId,
+		refs.scheduledTransferTargetAccountId,
+		preferredTargetId
+	);
+}
+
+function syncTransferTargetSelectionFor(sourceSelect, targetSelect, preferredTargetId) {
+	if (!sourceSelect || !targetSelect) {
 		return;
 	}
 
-	const sourceAccountId = getValidAccountId(refs.transferSourceAccountId.value) || getDefaultAccountId();
-	refs.transferSourceAccountId.value = sourceAccountId;
+	const sourceAccountId = getValidAccountId(sourceSelect.value) || getDefaultAccountId();
+	sourceSelect.value = sourceAccountId;
 
 	const candidates = state.accounts.filter(account => account.id !== sourceAccountId);
-	refs.transferTargetAccountId.replaceChildren();
+	targetSelect.replaceChildren();
 
 	if (!candidates.length) {
 		const option = document.createElement('option');
 		option.value = '';
 		option.textContent = '請先新增第二個帳戶';
-		refs.transferTargetAccountId.appendChild(option);
-		refs.transferTargetAccountId.value = '';
-		refs.transferTargetAccountId.disabled = true;
+		targetSelect.appendChild(option);
+		targetSelect.value = '';
+		targetSelect.disabled = true;
 		return;
 	}
 
-	refs.transferTargetAccountId.disabled = false;
+	targetSelect.disabled = false;
 	candidates.forEach(account => {
 		const option = document.createElement('option');
 		option.value = account.id;
 		option.textContent = account.name;
-		refs.transferTargetAccountId.appendChild(option);
+		targetSelect.appendChild(option);
 	});
 
 	const nextTargetId = candidates.some(account => account.id === preferredTargetId) ? preferredTargetId : candidates[0].id;
-	refs.transferTargetAccountId.value = nextTargetId;
+	targetSelect.value = nextTargetId;
 }
 
 function onSettingsSubmit(event) {
@@ -1049,6 +1088,63 @@ function onTransferSubmit(event) {
 	persistAndRender();
 }
 
+function onScheduledTransferSubmit(event) {
+	event.preventDefault();
+	clearError(refs.scheduledTransferError);
+
+	const name = normalizeRequiredText(refs.scheduledTransferName.value);
+	if (!name) {
+		setError(refs.scheduledTransferError, '請輸入指定月份轉帳名稱。');
+		return;
+	}
+
+	const amount = parseIntegerInput(refs.scheduledTransferAmount.value);
+	if (amount === null || amount <= 0) {
+		setError(refs.scheduledTransferError, '指定月份轉帳金額需為大於 0 的整數。');
+		return;
+	}
+
+	const scheduledMonth = parseOneTimeMonth(refs.scheduledTransferMonth.value);
+	if (!scheduledMonth) {
+		setError(refs.scheduledTransferError, '指定月份轉帳需要指定有效的年月。');
+		return;
+	}
+
+	const sourceAccountId = getValidAccountId(refs.scheduledTransferSourceAccountId.value);
+	const targetAccountId = getValidAccountId(refs.scheduledTransferTargetAccountId.value);
+	if (!sourceAccountId || !targetAccountId) {
+		setError(refs.scheduledTransferError, '轉帳需要同時指定來源與目標帳戶。');
+		return;
+	}
+	if (sourceAccountId === targetAccountId) {
+		setError(refs.scheduledTransferError, '來源與目標帳戶不可相同。');
+		return;
+	}
+
+	const payload = {
+		id: refs.scheduledTransferEditId.value.trim() || makeId(),
+		name,
+		amount,
+		sourceAccountId,
+		targetAccountId,
+		year: scheduledMonth.year,
+		monthOfYear: scheduledMonth.monthOfYear,
+	};
+
+	if (refs.scheduledTransferEditId.value.trim()) {
+		if (!updateById(state.scheduledTransfers, payload)) {
+			setError(refs.scheduledTransferError, '找不到要更新的指定月份轉帳，請重新操作。');
+			resetScheduledTransferForm();
+			return;
+		}
+	} else {
+		state.scheduledTransfers.push(payload);
+	}
+
+	resetScheduledTransferForm();
+	persistAndRender();
+}
+
 function updateById(list, nextItem) {
 	const index = list.findIndex(item => item.id === nextItem.id);
 	if (index < 0) {
@@ -1105,9 +1201,19 @@ function resetTransferForm() {
 	refs.transferEditId.value = '';
 	refs.transferSourceAccountId.value = getDefaultAccountId();
 	syncTransferTargetSelection(getDefaultTransferTargetId(refs.transferSourceAccountId.value));
-	refs.transferSubmitBtn.textContent = '新增轉帳';
+	refs.transferSubmitBtn.textContent = '新增固定轉帳';
 	refs.transferCancelBtn.classList.add('hidden');
 	clearError(refs.transferError);
+}
+
+function resetScheduledTransferForm() {
+	refs.scheduledTransferForm.reset();
+	refs.scheduledTransferEditId.value = '';
+	refs.scheduledTransferSourceAccountId.value = getDefaultAccountId();
+	syncScheduledTransferTargetSelection(getDefaultTransferTargetId(refs.scheduledTransferSourceAccountId.value));
+	refs.scheduledTransferSubmitBtn.textContent = '新增指定月份轉帳';
+	refs.scheduledTransferCancelBtn.classList.add('hidden');
+	clearError(refs.scheduledTransferError);
 }
 
 function enterAccountEditMode(account) {
@@ -1163,9 +1269,21 @@ function enterTransferEditMode(item) {
 	refs.transferAmount.value = item.amount;
 	refs.transferSourceAccountId.value = item.sourceAccountId;
 	syncTransferTargetSelection(item.targetAccountId);
-	refs.transferSubmitBtn.textContent = '儲存轉帳';
+	refs.transferSubmitBtn.textContent = '儲存固定轉帳';
 	refs.transferCancelBtn.classList.remove('hidden');
 	clearError(refs.transferError);
+}
+
+function enterScheduledTransferEditMode(item) {
+	refs.scheduledTransferEditId.value = item.id;
+	refs.scheduledTransferName.value = item.name;
+	refs.scheduledTransferAmount.value = item.amount;
+	refs.scheduledTransferMonth.value = `${item.year}-${padDatePart(item.monthOfYear)}`;
+	refs.scheduledTransferSourceAccountId.value = item.sourceAccountId;
+	syncScheduledTransferTargetSelection(item.targetAccountId);
+	refs.scheduledTransferSubmitBtn.textContent = '儲存指定月份轉帳';
+	refs.scheduledTransferCancelBtn.classList.remove('hidden');
+	clearError(refs.scheduledTransferError);
 }
 
 function syncIncomeCadenceField() {
@@ -1191,6 +1309,7 @@ function renderAll() {
 	renderSyncPanel();
 	renderAccountTable();
 	renderTransferTable();
+	renderScheduledTransferTable();
 	renderIncomeTable();
 	renderExpenseTable();
 	renderInstallmentTable();
@@ -1354,7 +1473,7 @@ function renderTransferTable() {
 	refs.transferTbody.replaceChildren();
 
 	if (!state.monthlyTransfers.length) {
-		appendEmptyRow(refs.transferTbody, 5, '尚未設定每月存款轉帳。');
+		appendEmptyRow(refs.transferTbody, 5, '尚未設定固定每月轉帳。');
 		return;
 	}
 
@@ -1388,6 +1507,48 @@ function renderTransferTable() {
 		);
 		row.appendChild(actions);
 		refs.transferTbody.appendChild(row);
+	});
+}
+
+function renderScheduledTransferTable() {
+	refs.scheduledTransferTbody.replaceChildren();
+
+	if (!state.scheduledTransfers.length) {
+		appendEmptyRow(refs.scheduledTransferTbody, 6, '尚未設定指定月份轉帳。');
+		return;
+	}
+
+	state.scheduledTransfers.forEach(item => {
+		const row = document.createElement('tr');
+		appendCell(row, item.name);
+		appendCell(row, formatYearMonthValue(item.year, item.monthOfYear));
+		appendCell(row, getAccountName(item.sourceAccountId));
+		appendCell(row, getAccountName(item.targetAccountId));
+		appendCell(row, formatCurrency(item.amount));
+
+		const actions = document.createElement('td');
+		actions.className = 'table-actions';
+		actions.appendChild(
+			buildActionButton('編輯', 'btn-secondary', () => {
+				enterScheduledTransferEditMode(item);
+			})
+		);
+		actions.appendChild(
+			buildActionButton('刪除', 'btn-danger', () => {
+				const confirmed =
+					typeof window === 'undefined' || typeof window.confirm !== 'function'
+						? true
+						: window.confirm(`確定刪除指定月份轉帳「${item.name}」嗎？`);
+				if (!confirmed) {
+					return;
+				}
+				state.scheduledTransfers = state.scheduledTransfers.filter(entry => entry.id !== item.id);
+				clearEditFormIfNeeded('scheduled-transfer', item.id);
+				persistAndRender();
+			})
+		);
+		row.appendChild(actions);
+		refs.scheduledTransferTbody.appendChild(row);
 	});
 }
 
@@ -1486,6 +1647,10 @@ function clearEditFormIfNeeded(type, itemId) {
 	}
 	if (type === 'transfer' && refs.transferEditId.value === itemId) {
 		resetTransferForm();
+		return;
+	}
+	if (type === 'scheduled-transfer' && refs.scheduledTransferEditId.value === itemId) {
+		resetScheduledTransferForm();
 	}
 }
 
@@ -1807,9 +1972,9 @@ function renderAccountForecastTable(accountRows) {
 		appendCell(tr, row.accountName, { label: '帳戶', className: 'forecast-cell forecast-cell-highlight' });
 		appendCell(tr, formatCurrency(row.startingBalance), { label: '起始餘額', className: 'forecast-cell' });
 		appendCell(tr, formatCurrency(row.income), { label: '收入', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.transferIn), { label: '轉入', className: 'forecast-cell' });
 		appendCell(tr, formatCurrency(row.expense), { label: '支出', className: 'forecast-cell' });
 		appendCell(tr, formatCurrency(row.installment), { label: '分期', className: 'forecast-cell' });
-		appendCell(tr, formatCurrency(row.transferIn), { label: '轉入', className: 'forecast-cell' });
 		appendCell(tr, formatCurrency(row.transferOut), { label: '轉出', className: 'forecast-cell' });
 		appendCell(tr, formatCurrency(row.endingBalance), { label: '月末餘額', className: 'forecast-cell forecast-cell-highlight' });
 		tr.appendChild(buildAccountStatusCell(row, { label: '狀態', className: 'forecast-cell forecast-cell-status' }));
@@ -1979,9 +2144,9 @@ function buildMobileAccountForecastCard(row) {
 	const fields = [
 		['起始餘額', formatCurrency(row.startingBalance)],
 		['收入', formatCurrency(row.income)],
+		['轉入', formatCurrency(row.transferIn)],
 		['支出', formatCurrency(row.expense)],
 		['分期', formatCurrency(row.installment)],
-		['轉入', formatCurrency(row.transferIn)],
 		['轉出', formatCurrency(row.transferOut)],
 		['月末餘額', formatCurrency(row.endingBalance)],
 	];
@@ -2191,13 +2356,7 @@ function calculateForecastData(currentState) {
 				return sum + item.amount;
 			}, 0);
 
-			const transferIn = sourceState.monthlyTransfers.reduce((sum, item) => {
-				return item.targetAccountId === account.id ? sum + item.amount : sum;
-			}, 0);
-
-			const transferOut = sourceState.monthlyTransfers.reduce((sum, item) => {
-				return item.sourceAccountId === account.id ? sum + item.amount : sum;
-			}, 0);
+			const { transferIn, transferOut } = calculateTransferTotalsForAccount(sourceState, account.id, monthDate);
 
 			const endingBalance = startingBalance + income + transferIn - expense - installment - transferOut;
 
@@ -2264,6 +2423,36 @@ function buildTotalForecastRow(monthLabel, monthDate, accountRows, anyNegativeAc
 	};
 }
 
+function calculateTransferTotalsForAccount(sourceState, accountId, monthDate) {
+	const monthlyTransfers = Array.isArray(sourceState.monthlyTransfers) ? sourceState.monthlyTransfers : [];
+	const scheduledTransfers = Array.isArray(sourceState.scheduledTransfers) ? sourceState.scheduledTransfers : [];
+
+	const monthlyTransferIn = monthlyTransfers.reduce((sum, item) => {
+		return item.targetAccountId === accountId ? sum + item.amount : sum;
+	}, 0);
+	const monthlyTransferOut = monthlyTransfers.reduce((sum, item) => {
+		return item.sourceAccountId === accountId ? sum + item.amount : sum;
+	}, 0);
+
+	const scheduledTransferIn = scheduledTransfers.reduce((sum, item) => {
+		if (!isScheduledTransferActiveInMonth(item, monthDate) || item.targetAccountId !== accountId) {
+			return sum;
+		}
+		return sum + item.amount;
+	}, 0);
+	const scheduledTransferOut = scheduledTransfers.reduce((sum, item) => {
+		if (!isScheduledTransferActiveInMonth(item, monthDate) || item.sourceAccountId !== accountId) {
+			return sum;
+		}
+		return sum + item.amount;
+	}, 0);
+
+	return {
+		transferIn: monthlyTransferIn + scheduledTransferIn,
+		transferOut: monthlyTransferOut + scheduledTransferOut,
+	};
+}
+
 function isIncomeActiveInMonth(item, monthDate) {
 	if (item.cadence === CADENCE_MONTHLY) {
 		return true;
@@ -2287,8 +2476,16 @@ function isExpenseActiveInMonth(item, monthDate) {
 	return false;
 }
 
+function isScheduledTransferActiveInMonth(item, monthDate) {
+	return monthDate.getFullYear() === item.year && monthDate.getMonth() + 1 === item.monthOfYear;
+}
+
 function formatMonth(date) {
 	return `${date.getFullYear()}/${padDatePart(date.getMonth() + 1)}`;
+}
+
+function formatYearMonthValue(year, monthOfYear) {
+	return `${year}/${padDatePart(monthOfYear)}`;
 }
 
 function formatSyncTimestamp(value) {
@@ -2558,6 +2755,7 @@ function buildExportPayload() {
 		})),
 		installments: state.installments.map(item => ({ ...item })),
 		monthlyTransfers: state.monthlyTransfers.map(item => ({ ...item })),
+		scheduledTransfers: state.scheduledTransfers.map(item => ({ ...item })),
 		currency: state.currency,
 		locale: state.locale,
 		updatedAt: state.updatedAt,
@@ -2622,7 +2820,7 @@ function validateImportPayload(payload) {
 		if (exportVersion === LEGACY_EXPORT_VERSION) {
 			return validateLegacyImportData(payload.data);
 		}
-		if (exportVersion === EXPORT_VERSION) {
+		if (exportVersion === PREVIOUS_EXPORT_VERSION || exportVersion === EXPORT_VERSION) {
 			return validateCurrentImportData(payload.data);
 		}
 		throw new Error('不支援的備份版本。');
@@ -2645,7 +2843,7 @@ function validateLegacyImportData(data) {
 		throw new Error('找不到可匯入的舊版資料欄位。');
 	}
 
-	return sanitizeState(migrateStateToV3(normalizeStateShape(data)));
+	return sanitizeState(migrateStateToV4(normalizeStateShape(data)));
 }
 
 function validateCurrentImportData(data) {
@@ -2659,8 +2857,8 @@ function validateCurrentImportData(data) {
 	}
 
 	const normalized = normalizeStateShape(data);
-	if (Number(normalized.schemaVersion) <= 2 || !Array.isArray(normalized.accounts)) {
-		return sanitizeState(migrateStateToV3(normalized));
+	if (Number(normalized.schemaVersion) <= 3 || !Array.isArray(normalized.accounts)) {
+		return sanitizeState(migrateStateToV4(normalized));
 	}
 
 	if (Number(normalized.schemaVersion) !== SCHEMA_VERSION) {
@@ -2740,11 +2938,11 @@ function loadState() {
 		const parsed = JSON.parse(raw);
 		const normalized = normalizeStateShape(parsed);
 		const needsMigration =
-			Number(normalized.schemaVersion) <= 2 ||
+			Number(normalized.schemaVersion) <= 3 ||
 			!Array.isArray(normalized.accounts) ||
 			Object.prototype.hasOwnProperty.call(normalized, 'initialBalance');
 
-		const nextState = sanitizeState(needsMigration ? migrateStateToV3(normalized) : normalized);
+		const nextState = sanitizeState(needsMigration ? migrateStateToV4(normalized) : normalized);
 
 		persistMigratedState(nextState);
 		return nextState;
@@ -2767,14 +2965,15 @@ function normalizeStateShape(input) {
 		recurringExpenses: input.recurringExpenses,
 		installments: input.installments,
 		monthlyTransfers: input.monthlyTransfers,
+		scheduledTransfers: input.scheduledTransfers,
 		currency: input.currency,
 		locale: input.locale,
 		updatedAt: input.updatedAt,
 	};
 }
 
-function migrateStateToV3(legacyState) {
-	if (Array.isArray(legacyState.accounts) && Number(legacyState.schemaVersion) >= SCHEMA_VERSION) {
+function migrateStateToV4(legacyState) {
+	if (Array.isArray(legacyState.accounts)) {
 		return {
 			schemaVersion: SCHEMA_VERSION,
 			accounts: legacyState.accounts,
@@ -2783,6 +2982,7 @@ function migrateStateToV3(legacyState) {
 			recurringExpenses: legacyState.recurringExpenses,
 			installments: legacyState.installments,
 			monthlyTransfers: legacyState.monthlyTransfers,
+			scheduledTransfers: legacyState.scheduledTransfers,
 			currency: legacyState.currency,
 			locale: legacyState.locale,
 			updatedAt: legacyState.updatedAt,
@@ -2799,6 +2999,7 @@ function migrateStateToV3(legacyState) {
 		recurringExpenses: migrateLegacyRecurringItems(legacyState.recurringExpenses, mainAccount.id, 'expense'),
 		installments: migrateLegacyInstallments(legacyState.installments, mainAccount.id),
 		monthlyTransfers: [],
+		scheduledTransfers: [],
 		currency: legacyState.currency,
 		locale: legacyState.locale,
 		updatedAt: legacyState.updatedAt,
@@ -2898,6 +3099,7 @@ function sanitizeState(inputState) {
 		recurringExpenses: sanitizeRecurringExpenses(source.recurringExpenses, accounts),
 		installments: sanitizeInstallments(source.installments, accounts),
 		monthlyTransfers: sanitizeMonthlyTransfers(source.monthlyTransfers, accounts),
+		scheduledTransfers: sanitizeScheduledTransfers(source.scheduledTransfers, accounts),
 		currency: typeof source.currency === 'string' && source.currency.trim() ? source.currency.trim() : DEFAULT_CURRENCY,
 		locale: typeof source.locale === 'string' && source.locale.trim() ? source.locale.trim() : DEFAULT_LOCALE,
 		updatedAt: typeof source.updatedAt === 'string' && source.updatedAt.trim() ? source.updatedAt : new Date().toISOString(),
@@ -3145,6 +3347,58 @@ function sanitizeMonthlyTransfers(items, accounts) {
 		.filter(Boolean);
 }
 
+function sanitizeScheduledTransfers(items, accounts) {
+	if (!Array.isArray(items)) {
+		return [];
+	}
+
+	const accountIds = new Set(accounts.map(account => account.id));
+	const usedIds = new Set();
+
+	return items
+		.map(item => {
+			if (!item || typeof item !== 'object') {
+				return null;
+			}
+
+			const name = normalizeRequiredText(item.name);
+			if (!name) {
+				return null;
+			}
+
+			const amount = sanitizeBoundedInteger(item.amount, null, 1);
+			const year = sanitizeBoundedInteger(item.year, null, 2000, 9999);
+			const monthOfYear = sanitizeBoundedInteger(item.monthOfYear, null, 1, 12);
+			if (amount === null || year === null || monthOfYear === null) {
+				return null;
+			}
+
+			if (!accountIds.has(item.sourceAccountId) || !accountIds.has(item.targetAccountId)) {
+				return null;
+			}
+			if (item.sourceAccountId === item.targetAccountId) {
+				return null;
+			}
+
+			let id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : makeId();
+			while (usedIds.has(id)) {
+				id = makeId();
+			}
+			usedIds.add(id);
+
+			return {
+				id,
+				name,
+				amount,
+				sourceAccountId: item.sourceAccountId,
+				targetAccountId: item.targetAccountId,
+				year,
+				monthOfYear,
+			};
+		})
+		.filter(Boolean);
+}
+
 function sanitizeBoundedInteger(value, fallback, min, max) {
 	const parsed = parseIntegerInput(value);
 	if (parsed === null) {
@@ -3245,7 +3499,10 @@ function getAccountReferenceCount(accountId) {
 	const transferCount = state.monthlyTransfers.filter(
 		item => item.sourceAccountId === accountId || item.targetAccountId === accountId
 	).length;
-	return incomeCount + expenseCount + installmentCount + transferCount;
+	const scheduledTransferCount = state.scheduledTransfers.filter(
+		item => item.sourceAccountId === accountId || item.targetAccountId === accountId
+	).length;
+	return incomeCount + expenseCount + installmentCount + transferCount + scheduledTransferCount;
 }
 
 function getAccountDeletionBlockReason(accountId) {
