@@ -150,7 +150,9 @@ function createUiState() {
 	return {
 		theme: getDocumentTheme(),
 		isSyncPopoverOpen: false,
-		expandedAccountForecastMonths: new Set(),
+		isTotalForecastExpanded: false,
+		expandedAccountForecastAccounts: new Set(),
+		hasTouchedAccountForecastExpansion: false,
 	};
 }
 
@@ -519,6 +521,7 @@ function cacheDom() {
 
 	refs.forecastTbody = document.getElementById('forecast-tbody');
 	refs.accountForecastTbody = document.getElementById('account-forecast-tbody');
+	refs.forecastMobile = document.getElementById('forecast-mobile');
 	refs.accountForecastMobile = document.getElementById('account-forecast-mobile');
 	refs.chartCanvas = document.getElementById('forecast-chart');
 	refs.chartError = document.getElementById('chart-error');
@@ -1160,6 +1163,7 @@ function renderAll() {
 	const forecast = calculateForecastData(state);
 	renderSummary(forecast);
 	renderForecastTable(forecast.totalRows);
+	renderForecastMobile(forecast.totalRows);
 	renderAccountForecastTable(forecast.accountRows);
 	renderAccountForecastMobile(forecast.accountRows);
 	renderChart(forecast.totalRows);
@@ -1692,6 +1696,63 @@ function renderForecastTable(totalRows) {
 	});
 }
 
+function renderForecastMobile(totalRows) {
+	if (!refs.forecastMobile) {
+		return;
+	}
+
+	refs.forecastMobile.replaceChildren();
+
+	if (!totalRows.length) {
+		const emptyState = document.createElement('p');
+		emptyState.className = 'mobile-forecast-empty';
+		emptyState.textContent = '尚無預測資料。';
+		refs.forecastMobile.appendChild(emptyState);
+		return;
+	}
+
+	const lastRow = totalRows[totalRows.length - 1];
+	const details = document.createElement('details');
+	details.className = 'forecast-mobile-accordion-item';
+	details.open = uiState.isTotalForecastExpanded;
+
+	const summary = document.createElement('summary');
+	summary.className = 'forecast-mobile-summary';
+
+	const titleWrap = document.createElement('div');
+	titleWrap.className = 'forecast-mobile-summary-main';
+
+	const title = document.createElement('strong');
+	title.textContent = '總表';
+	const subtitle = document.createElement('span');
+	subtitle.textContent = `${totalRows.length} 個月份 · 最新月末總餘額 ${formatCurrency(lastRow.endingBalance)}`;
+	titleWrap.appendChild(title);
+	titleWrap.appendChild(subtitle);
+
+	const indicator = document.createElement('div');
+	indicator.className = 'forecast-mobile-summary-side';
+	const totalStatus = getTotalForecastStatusMeta(totalRows);
+	indicator.appendChild(createStatusChip(totalStatus.tone, totalStatus.text));
+
+	summary.appendChild(titleWrap);
+	summary.appendChild(indicator);
+	details.appendChild(summary);
+
+	const cards = document.createElement('div');
+	cards.className = 'forecast-mobile-cards';
+
+	totalRows.forEach(row => {
+		cards.appendChild(buildMobileForecastCard(row));
+	});
+
+	details.appendChild(cards);
+	details.addEventListener('toggle', () => {
+		uiState.isTotalForecastExpanded = details.open;
+	});
+
+	refs.forecastMobile.appendChild(details);
+}
+
 function renderAccountForecastTable(accountRows) {
 	refs.accountForecastTbody.replaceChildren();
 
@@ -1736,38 +1797,45 @@ function renderAccountForecastMobile(accountRows) {
 		return;
 	}
 
-	const groupedRows = groupAccountForecastRowsByMonth(accountRows);
-	const expandedMonths = uiState.expandedAccountForecastMonths;
-	const shouldAutoExpandFirst = expandedMonths.size === 0;
+	const groupedRows = groupAccountForecastRowsByAccount(accountRows);
+	const expandedAccounts = uiState.expandedAccountForecastAccounts;
+	const groupIds = new Set(groupedRows.map(group => group.accountId));
+	const firstNegativeGroup = groupedRows.find(group => group.hasNegative);
 
-	groupedRows.forEach((group, index) => {
+	Array.from(expandedAccounts).forEach(accountId => {
+		if (!groupIds.has(accountId)) {
+			expandedAccounts.delete(accountId);
+		}
+	});
+
+	groupedRows.forEach(group => {
 		const details = document.createElement('details');
-		details.className = 'forecast-month-accordion';
-		details.open = expandedMonths.has(group.monthLabel) || (shouldAutoExpandFirst && index === 0);
+		details.className = 'forecast-mobile-accordion-item';
+		details.open = uiState.hasTouchedAccountForecastExpansion ? expandedAccounts.has(group.accountId) : firstNegativeGroup?.accountId === group.accountId;
 
 		const summary = document.createElement('summary');
-		summary.className = 'forecast-month-summary';
+		summary.className = 'forecast-mobile-summary';
 
 		const titleWrap = document.createElement('div');
-		titleWrap.className = 'forecast-month-summary-main';
+		titleWrap.className = 'forecast-mobile-summary-main';
 
 		const title = document.createElement('strong');
-		title.textContent = group.monthLabel;
+		title.textContent = group.accountName;
 		const subtitle = document.createElement('span');
-		subtitle.textContent = `${group.rows.length} 個帳戶 · 月末總額 ${formatCurrency(group.totalEndingBalance)}`;
+		subtitle.textContent = `${group.rows.length} 個月份 · 最新月末餘額 ${formatCurrency(group.latestEndingBalance)}`;
 		titleWrap.appendChild(title);
 		titleWrap.appendChild(subtitle);
 
 		const indicator = document.createElement('div');
-		indicator.className = 'forecast-month-summary-side';
-		indicator.appendChild(createStatusChip(group.hasNegative ? 'warn' : 'ok', group.hasNegative ? '有帳戶不足' : '正常'));
+		indicator.className = 'forecast-mobile-summary-side';
+		indicator.appendChild(createStatusChip(group.hasNegative ? 'warn' : 'ok', group.hasNegative ? '有月份不足' : '正常'));
 
 		summary.appendChild(titleWrap);
 		summary.appendChild(indicator);
 		details.appendChild(summary);
 
 		const cards = document.createElement('div');
-		cards.className = 'forecast-month-cards';
+		cards.className = 'forecast-mobile-cards';
 
 		group.rows.forEach(row => {
 			cards.appendChild(buildMobileAccountForecastCard(row));
@@ -1775,10 +1843,11 @@ function renderAccountForecastMobile(accountRows) {
 
 		details.appendChild(cards);
 		details.addEventListener('toggle', () => {
+			uiState.hasTouchedAccountForecastExpansion = true;
 			if (details.open) {
-				expandedMonths.add(group.monthLabel);
+				expandedAccounts.add(group.accountId);
 			} else {
-				expandedMonths.delete(group.monthLabel);
+				expandedAccounts.delete(group.accountId);
 			}
 		});
 
@@ -1786,46 +1855,92 @@ function renderAccountForecastMobile(accountRows) {
 	});
 }
 
-function groupAccountForecastRowsByMonth(accountRows) {
-	const groups = [];
-	let currentGroup = null;
+function groupAccountForecastRowsByAccount(accountRows) {
+	const groups = new Map();
 
-	accountRows.forEach(row => {
-		if (!currentGroup || currentGroup.monthLabel !== row.monthLabel) {
-			currentGroup = {
-				monthLabel: row.monthLabel,
-				rows: [],
-				totalEndingBalance: 0,
-				hasNegative: false,
-			};
-			groups.push(currentGroup);
-		}
-
-		currentGroup.rows.push(row);
-		currentGroup.totalEndingBalance += row.endingBalance;
-		currentGroup.hasNegative = currentGroup.hasNegative || row.status === 'negative';
+	state.accounts.forEach(account => {
+		groups.set(account.id, {
+			accountId: account.id,
+			accountName: account.name,
+			rows: [],
+			latestEndingBalance: account.initialBalance,
+			hasNegative: false,
+		});
 	});
 
-	return groups;
+	accountRows.forEach(row => {
+		if (!groups.has(row.accountId)) {
+			groups.set(row.accountId, {
+				accountId: row.accountId,
+				accountName: row.accountName,
+				rows: [],
+				latestEndingBalance: row.endingBalance,
+				hasNegative: false,
+			});
+		}
+
+		const group = groups.get(row.accountId);
+		group.accountName = row.accountName;
+		group.rows.push(row);
+		group.latestEndingBalance = row.endingBalance;
+		group.hasNegative = group.hasNegative || row.status === 'negative';
+	});
+
+	return Array.from(groups.values()).filter(group => group.rows.length);
+}
+
+function buildMobileForecastCard(row) {
+	const card = document.createElement('article');
+	card.className = 'forecast-mobile-card';
+	if (row.status !== 'ok') {
+		card.classList.add('is-warning');
+	}
+
+	const header = document.createElement('div');
+	header.className = 'forecast-mobile-card-header';
+
+	const title = document.createElement('strong');
+	title.textContent = row.monthLabel;
+	header.appendChild(title);
+	header.appendChild(buildTotalForecastStatusChip(row.status));
+
+	const grid = document.createElement('div');
+	grid.className = 'forecast-mobile-grid';
+	const fields = [
+		['起始餘額', formatCurrency(row.startingBalance)],
+		['收入', formatCurrency(row.income)],
+		['支出', formatCurrency(row.expense)],
+		['分期', formatCurrency(row.installment)],
+		['淨額', formatCurrency(row.net)],
+		['月末總餘額', formatCurrency(row.endingBalance)],
+	];
+
+	fields.forEach(([label, value]) => {
+		grid.appendChild(buildMobileForecastPair(label, value));
+	});
+
+	card.appendChild(header);
+	card.appendChild(grid);
+	return card;
 }
 
 function buildMobileAccountForecastCard(row) {
 	const card = document.createElement('article');
-	card.className = 'forecast-account-card';
+	card.className = 'forecast-mobile-card';
 	if (row.status === 'negative') {
 		card.classList.add('is-warning');
 	}
 
 	const header = document.createElement('div');
-	header.className = 'forecast-account-card-header';
+	header.className = 'forecast-mobile-card-header';
 
 	const title = document.createElement('strong');
-	title.textContent = row.accountName;
+	title.textContent = row.monthLabel;
 	header.appendChild(title);
-	header.appendChild(createStatusChip(row.status === 'negative' ? 'warn' : 'ok', row.status === 'negative' ? '帳戶不足' : '正常'));
+	header.appendChild(buildAccountForecastStatusChip(row));
 
 	const grid = document.createElement('div');
-	grid.className = 'forecast-account-grid';
+	grid.className = 'forecast-mobile-grid';
 	const fields = [
 		['起始餘額', formatCurrency(row.startingBalance)],
 		['收入', formatCurrency(row.income)],
@@ -1837,20 +1952,7 @@ function buildMobileAccountForecastCard(row) {
 	];
 
 	fields.forEach(([label, value]) => {
-		const pair = document.createElement('div');
-		pair.className = 'forecast-account-pair';
-
-		const pairLabel = document.createElement('span');
-		pairLabel.className = 'forecast-account-pair-label';
-		pairLabel.textContent = label;
-
-		const pairValue = document.createElement('strong');
-		pairValue.className = 'forecast-account-pair-value';
-		pairValue.textContent = value;
-
-		pair.appendChild(pairLabel);
-		pair.appendChild(pairValue);
-		grid.appendChild(pair);
+		grid.appendChild(buildMobileForecastPair(label, value));
 	});
 
 	card.appendChild(header);
@@ -1858,16 +1960,27 @@ function buildMobileAccountForecastCard(row) {
 	return card;
 }
 
+function buildMobileForecastPair(label, value) {
+	const pair = document.createElement('div');
+	pair.className = 'forecast-mobile-pair';
+
+	const pairLabel = document.createElement('span');
+	pairLabel.className = 'forecast-mobile-pair-label';
+	pairLabel.textContent = label;
+
+	const pairValue = document.createElement('strong');
+	pairValue.className = 'forecast-mobile-pair-value';
+	pairValue.textContent = value;
+
+	pair.appendChild(pairLabel);
+	pair.appendChild(pairValue);
+	return pair;
+}
+
 function buildStatusCell(status, options = {}) {
 	const cell = document.createElement('td');
 	applyCellMeta(cell, options);
-	const chip =
-		status === 'total-negative'
-			? createStatusChip('warn', '總額不足')
-			: status === 'account-negative'
-				? createStatusChip('caution', '部分帳戶不足')
-				: createStatusChip('ok', '正常');
-
+	const chip = buildTotalForecastStatusChip(status);
 	cell.appendChild(chip);
 	return cell;
 }
@@ -1875,9 +1988,33 @@ function buildStatusCell(status, options = {}) {
 function buildAccountStatusCell(row, options = {}) {
 	const cell = document.createElement('td');
 	applyCellMeta(cell, options);
-	const chip = createStatusChip(row.status === 'negative' ? 'warn' : 'ok', row.status === 'negative' ? '帳戶不足' : '正常');
+	const chip = buildAccountForecastStatusChip(row);
 	cell.appendChild(chip);
 	return cell;
+}
+
+function buildTotalForecastStatusChip(status) {
+	if (status === 'total-negative') {
+		return createStatusChip('warn', '總額不足');
+	}
+	if (status === 'account-negative') {
+		return createStatusChip('caution', '部分帳戶不足');
+	}
+	return createStatusChip('ok', '正常');
+}
+
+function buildAccountForecastStatusChip(row) {
+	return createStatusChip(row.status === 'negative' ? 'warn' : 'ok', row.status === 'negative' ? '帳戶不足' : '正常');
+}
+
+function getTotalForecastStatusMeta(totalRows) {
+	if (totalRows.some(row => row.status === 'total-negative')) {
+		return { tone: 'warn', text: '總額不足' };
+	}
+	if (totalRows.some(row => row.status === 'account-negative')) {
+		return { tone: 'caution', text: '部分帳戶不足' };
+	}
+	return { tone: 'ok', text: '正常' };
 }
 
 function createStatusChip(tone, text) {

@@ -944,7 +944,7 @@ tbody tr.warning-row {
 	background: var(--surface-soft);
 }
 
-.forecast-month-accordion {
+.forecast-mobile-accordion-item {
 	border: 1px solid var(--table-border);
 	border-radius: 16px;
 	background: var(--surface-raised);
@@ -952,7 +952,7 @@ tbody tr.warning-row {
 	overflow: hidden;
 }
 
-.forecast-month-summary {
+.forecast-mobile-summary {
 	list-style: none;
 	display: flex;
 	justify-content: space-between;
@@ -963,11 +963,11 @@ tbody tr.warning-row {
 	background: var(--surface-soft);
 }
 
-.forecast-month-summary::-webkit-details-marker {
+.forecast-mobile-summary::-webkit-details-marker {
 	display: none;
 }
 
-.forecast-month-summary::after {
+.forecast-mobile-summary::after {
 	content: '＋';
 	flex: 0 0 auto;
 	font-size: 1rem;
@@ -975,22 +975,22 @@ tbody tr.warning-row {
 	color: var(--text-muted);
 }
 
-.forecast-month-accordion[open] .forecast-month-summary::after {
+.forecast-mobile-accordion-item[open] .forecast-mobile-summary::after {
 	content: '－';
 }
 
-.forecast-month-summary-main {
+.forecast-mobile-summary-main {
 	display: grid;
 	gap: 4px;
 	min-width: 0;
 }
 
-.forecast-month-summary-main strong {
+.forecast-mobile-summary-main strong {
 	font-family: 'Manrope', sans-serif;
 	font-size: 0.98rem;
 }
 
-.forecast-month-summary-main span {
+.forecast-mobile-summary-main span {
 	color: var(--text-muted);
 	font-size: 0.82rem;
 	line-height: 1.4;
@@ -998,18 +998,18 @@ tbody tr.warning-row {
 	overflow-wrap: anywhere;
 }
 
-.forecast-month-summary-side {
+.forecast-mobile-summary-side {
 	flex: 0 0 auto;
 }
 
-.forecast-month-cards {
+.forecast-mobile-cards {
 	display: grid;
 	gap: 10px;
 	padding: 12px;
 	background: var(--surface-raised);
 }
 
-.forecast-account-card {
+.forecast-mobile-card {
 	padding: 12px;
 	border: 1px solid var(--table-row-border);
 	border-radius: 14px;
@@ -1017,12 +1017,12 @@ tbody tr.warning-row {
 	min-width: 0;
 }
 
-.forecast-account-card.is-warning {
+.forecast-mobile-card.is-warning {
 	background: linear-gradient(180deg, var(--caution-bg), var(--panel-bg-solid));
 	border-color: rgba(154, 103, 0, 0.18);
 }
 
-.forecast-account-card-header {
+.forecast-mobile-card-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -1031,20 +1031,20 @@ tbody tr.warning-row {
 	min-width: 0;
 }
 
-.forecast-account-card-header strong {
+.forecast-mobile-card-header strong {
 	font-size: 0.96rem;
 	min-width: 0;
 	word-break: break-word;
 	overflow-wrap: anywhere;
 }
 
-.forecast-account-grid {
+.forecast-mobile-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
 }
 
-.forecast-account-pair {
+.forecast-mobile-pair {
 	padding: 10px;
 	border-radius: 12px;
 	background: var(--surface-soft);
@@ -1053,12 +1053,12 @@ tbody tr.warning-row {
 	gap: 4px;
 }
 
-.forecast-account-pair-label {
+.forecast-mobile-pair-label {
 	color: var(--text-muted);
 	font-size: 0.78rem;
 }
 
-.forecast-account-pair-value {
+.forecast-mobile-pair-value {
 	font-size: 0.92rem;
 	line-height: 1.35;
 	word-break: break-word;
@@ -1426,7 +1426,7 @@ tbody tr.warning-row {
 		text-align: left;
 	}
 
-	.account-forecast-table-wrap {
+	.results-table-wrap {
 		display: none;
 	}
 
