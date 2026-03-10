@@ -267,19 +267,31 @@
 
         <article class="panel">
           <div class="section-title">
-            <h2>固定每月轉帳</h2>
-            <p>固定把某帳戶的錢轉進另一個帳戶，不改變總額。</p>
+            <h2>轉帳規劃</h2>
+            <p>用同一張表管理每月固定轉帳與指定年月一次轉帳。</p>
           </div>
           <form id="transfer-form" novalidate>
             <input type="hidden" id="transfer-edit-id">
+            <input type="hidden" id="transfer-edit-source-type">
             <div class="form-grid two">
               <label>
                 名稱
                 <input id="transfer-name" type="text" maxlength="40" placeholder="例如：薪轉後存旅遊帳戶" required>
               </label>
               <label>
-                每月金額（TWD）
+                類型
+                <select id="transfer-type" required>
+                  <option value="monthly">每月固定</option>
+                  <option value="scheduled">指定年月一次</option>
+                </select>
+              </label>
+              <label>
+                金額（TWD）
                 <input id="transfer-amount" type="number" min="1" step="1" required>
+              </label>
+              <label id="transfer-month-wrap" class="hidden">
+                年月
+                <input id="transfer-month" type="month">
               </label>
               <label>
                 來源帳戶
@@ -291,7 +303,7 @@
               </label>
             </div>
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary" id="transfer-submit-btn">新增固定轉帳</button>
+              <button type="submit" class="btn btn-primary" id="transfer-submit-btn">新增轉帳規劃</button>
               <button type="button" class="btn btn-secondary hidden" id="transfer-cancel-btn">取消編輯</button>
             </div>
             <p id="transfer-error" class="form-error" role="alert"></p>
@@ -301,9 +313,11 @@
               <thead>
                 <tr>
                   <th>名稱</th>
+                  <th>類型</th>
+                  <th>生效規則</th>
                   <th>來源帳戶</th>
                   <th>目標帳戶</th>
-                  <th>每月金額</th>
+                  <th>金額</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -314,52 +328,36 @@
 
         <article class="panel">
           <div class="section-title">
-            <h2>指定月份轉帳</h2>
-            <p>針對單一月份安排一次轉帳，適合每月金額不固定的資金調度。</p>
+            <h2>歷史月結</h2>
+            <p>為整個月份保存各帳戶實際月末餘額，並保留當下預測快照。</p>
           </div>
-          <form id="scheduled-transfer-form" novalidate>
-            <input type="hidden" id="scheduled-transfer-edit-id">
+          <form id="monthly-closing-form" novalidate>
+            <input type="hidden" id="monthly-closing-edit-id">
             <div class="form-grid two">
               <label>
-                名稱
-                <input id="scheduled-transfer-name" type="text" maxlength="40" placeholder="例如：3 月補存旅遊帳戶" required>
-              </label>
-              <label>
-                金額（TWD）
-                <input id="scheduled-transfer-amount" type="number" min="1" step="1" required>
-              </label>
-              <label>
-                年月
-                <input id="scheduled-transfer-month" type="month" required>
-              </label>
-              <label>
-                來源帳戶
-                <select id="scheduled-transfer-source-account-id" required></select>
-              </label>
-              <label>
-                目標帳戶
-                <select id="scheduled-transfer-target-account-id" required></select>
+                月份
+                <input id="monthly-closing-month" type="month" required>
               </label>
             </div>
+            <div id="monthly-closing-accounts" class="closing-account-list" aria-live="polite"></div>
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary" id="scheduled-transfer-submit-btn">新增指定月份轉帳</button>
-              <button type="button" class="btn btn-secondary hidden" id="scheduled-transfer-cancel-btn">取消編輯</button>
+              <button type="submit" class="btn btn-primary" id="monthly-closing-submit-btn">儲存月結</button>
+              <button type="button" class="btn btn-secondary hidden" id="monthly-closing-cancel-btn">取消編輯</button>
             </div>
-            <p id="scheduled-transfer-error" class="form-error" role="alert"></p>
+            <p id="monthly-closing-error" class="form-error" role="alert"></p>
           </form>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>名稱</th>
-                  <th>年月</th>
-                  <th>來源帳戶</th>
-                  <th>目標帳戶</th>
-                  <th>金額</th>
+                  <th>月份</th>
+                  <th>預測月末總餘額</th>
+                  <th>實際月末總餘額</th>
+                  <th>差額</th>
                   <th>操作</th>
                 </tr>
               </thead>
-              <tbody id="scheduled-transfer-tbody"></tbody>
+              <tbody id="monthly-closing-tbody"></tbody>
             </table>
           </div>
         </article>
@@ -623,7 +621,7 @@
       <section class="panel results-panel">
         <div class="section-title">
           <h2>預測結果</h2>
-          <p>總表顯示整體現金流，明細表顯示各帳戶月底狀態。</p>
+          <p>總表與帳戶明細維持未來月份預測，歷史月結另外顯示預測與實際差異。</p>
         </div>
         <div class="chart-wrap">
           <canvas id="forecast-chart" aria-label="月末總餘額趨勢圖"></canvas>
@@ -631,6 +629,27 @@
         <p id="chart-error" class="form-error" role="alert"></p>
 
         <div class="results-stack">
+          <div>
+            <div class="subsection-title">
+              <h3>歷史對照</h3>
+            </div>
+            <div class="table-wrap results-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>月份</th>
+                    <th>預測月末總餘額</th>
+                    <th>實際月末總餘額</th>
+                    <th>差額</th>
+                    <th>帳戶差異</th>
+                  </tr>
+                </thead>
+                <tbody id="history-comparison-tbody"></tbody>
+              </table>
+            </div>
+            <div id="history-comparison-mobile" class="mobile-forecast-accordion" aria-label="手機版歷史對照"></div>
+          </div>
+
           <div>
             <div class="subsection-title">
               <h3>總表</h3>

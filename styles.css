@@ -52,8 +52,10 @@
 	--status-progress: #c38a13;
 	--status-success: #1a7f64;
 	--status-error: #d14332;
-	--chart-line: #0f766e;
-	--chart-fill: rgba(15, 118, 110, 0.16);
+	--chart-actual-line: #0f766e;
+	--chart-actual-fill: rgba(15, 118, 110, 0.12);
+	--chart-forecast-line: #c2410c;
+	--chart-forecast-fill: rgba(194, 65, 12, 0.16);
 	--chart-grid: rgba(15, 36, 48, 0.1);
 	--chart-text: #5d7280;
 	--chart-tooltip-bg: rgba(255, 255, 255, 0.96);
@@ -115,8 +117,10 @@ html[data-theme='dark'] {
 	--status-progress: #ffd37a;
 	--status-success: #89efcf;
 	--status-error: #ff8a7a;
-	--chart-line: #6ce1ce;
-	--chart-fill: rgba(82, 198, 179, 0.2);
+	--chart-actual-line: #6ce1ce;
+	--chart-actual-fill: rgba(82, 198, 179, 0.16);
+	--chart-forecast-line: #ffb27c;
+	--chart-forecast-fill: rgba(255, 178, 124, 0.2);
 	--chart-grid: rgba(233, 245, 251, 0.12);
 	--chart-text: #a8becb;
 	--chart-tooltip-bg: rgba(7, 21, 33, 0.96);
@@ -939,6 +943,87 @@ tbody tr.warning-row {
 	background: linear-gradient(180deg, var(--surface-raised), var(--surface-secondary));
 }
 
+.closing-account-list {
+	display: grid;
+	gap: 10px;
+	margin-top: 14px;
+}
+
+.closing-account-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1.1fr) minmax(220px, 0.9fr);
+	gap: 12px;
+	padding: 12px 14px;
+	border-radius: 14px;
+	border: 1px solid var(--card-border-soft);
+	background: var(--panel-glass);
+}
+
+.closing-account-meta,
+.closing-account-input {
+	display: grid;
+	gap: 4px;
+}
+
+.closing-account-meta span,
+.closing-account-input {
+	color: var(--text-muted);
+	font-size: 0.88rem;
+}
+
+.closing-account-meta strong,
+.closing-account-input {
+	color: var(--text-main);
+}
+
+.history-breakdown {
+	margin: 0;
+}
+
+.history-breakdown > summary {
+	list-style: none;
+	cursor: pointer;
+	color: var(--brand-strong);
+	font-weight: 700;
+}
+
+.history-breakdown > summary::-webkit-details-marker {
+	display: none;
+}
+
+.history-breakdown > summary::after {
+	content: '＋';
+	margin-left: 8px;
+	color: var(--text-muted);
+}
+
+.history-breakdown[open] > summary::after {
+	content: '－';
+}
+
+.history-breakdown-list {
+	display: grid;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.history-breakdown-item {
+	display: grid;
+	gap: 4px;
+	padding: 10px 12px;
+	border-radius: 12px;
+	border: 1px solid var(--table-row-border);
+	background: var(--surface-soft);
+}
+
+.history-breakdown-item span {
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	line-height: 1.45;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+}
+
 .batch-list {
 	display: grid;
 	gap: 10px;
@@ -1206,6 +1291,10 @@ tbody tr.warning-row {
 	}
 
 	.batch-item-row {
+		grid-template-columns: 1fr;
+	}
+
+	.closing-account-row {
 		grid-template-columns: 1fr;
 	}
 }

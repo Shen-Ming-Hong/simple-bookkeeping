@@ -1,7 +1,8 @@
 const STORAGE_KEY = 'accounting_forecast_v1';
-const SCHEMA_VERSION = 4;
-const EXPORT_VERSION = 3;
-const PREVIOUS_EXPORT_VERSION = 2;
+const SCHEMA_VERSION = 5;
+const EXPORT_VERSION = 4;
+const PREVIOUS_EXPORT_VERSION = 3;
+const EARLIER_EXPORT_VERSION = 2;
 const LEGACY_EXPORT_VERSION = 1;
 const MAX_MONTHS = 120;
 const DEFAULT_CURRENCY = 'TWD';
@@ -9,6 +10,8 @@ const DEFAULT_LOCALE = 'zh-TW';
 const CADENCE_MONTHLY = 'monthly';
 const CADENCE_YEARLY = 'yearly';
 const CADENCE_ONE_TIME = 'one-time';
+const TRANSFER_PLAN_MONTHLY = 'monthly';
+const TRANSFER_PLAN_SCHEDULED = 'scheduled';
 const APP_ID = 'accounting_forecast';
 const BACKUP_FILENAME_PREFIX = 'accounting-backup';
 const MAIN_ACCOUNT_NAME = '主帳戶';
@@ -49,6 +52,7 @@ const CURRENT_BACKUP_DATA_KEYS = [
 	'installments',
 	'monthlyTransfers',
 	'scheduledTransfers',
+	'monthlyClosings',
 	'currency',
 	'locale',
 	'updatedAt',
@@ -103,6 +107,7 @@ function createDefaultState() {
 		installments: [],
 		monthlyTransfers: [],
 		scheduledTransfers: [],
+		monthlyClosings: [],
 		currency: DEFAULT_CURRENCY,
 		locale: DEFAULT_LOCALE,
 		updatedAt: new Date().toISOString(),
@@ -250,7 +255,8 @@ function applyTheme(nextTheme, options = {}) {
 
 	renderThemeToggle();
 	if (rerenderChart) {
-		renderChart(calculateForecastData(state).totalRows);
+		const forecast = calculateForecastData(state);
+		renderChart(forecast.historyRows, forecast.totalRows);
 	}
 }
 
@@ -388,8 +394,10 @@ function getCssVariableValue(name, fallback) {
 
 function getChartPalette() {
 	return {
-		line: getCssVariableValue('--chart-line', '#0f766e'),
-		fill: getCssVariableValue('--chart-fill', 'rgba(15, 118, 110, 0.16)'),
+		actualLine: getCssVariableValue('--chart-actual-line', '#0f766e'),
+		actualFill: getCssVariableValue('--chart-actual-fill', 'rgba(15, 118, 110, 0.12)'),
+		forecastLine: getCssVariableValue('--chart-forecast-line', '#c2410c'),
+		forecastFill: getCssVariableValue('--chart-forecast-fill', 'rgba(194, 65, 12, 0.16)'),
 		grid: getCssVariableValue('--chart-grid', 'rgba(15, 36, 48, 0.1)'),
 		text: getCssVariableValue('--chart-text', '#5d7280'),
 		tooltipBackground: getCssVariableValue('--chart-tooltip-bg', 'rgba(255, 255, 255, 0.96)'),
@@ -513,8 +521,12 @@ function cacheDom() {
 
 	refs.transferForm = document.getElementById('transfer-form');
 	refs.transferEditId = document.getElementById('transfer-edit-id');
+	refs.transferEditSourceType = document.getElementById('transfer-edit-source-type');
 	refs.transferName = document.getElementById('transfer-name');
+	refs.transferType = document.getElementById('transfer-type');
 	refs.transferAmount = document.getElementById('transfer-amount');
+	refs.transferMonthWrap = document.getElementById('transfer-month-wrap');
+	refs.transferMonth = document.getElementById('transfer-month');
 	refs.transferSourceAccountId = document.getElementById('transfer-source-account-id');
 	refs.transferTargetAccountId = document.getElementById('transfer-target-account-id');
 	refs.transferSubmitBtn = document.getElementById('transfer-submit-btn');
@@ -522,22 +534,21 @@ function cacheDom() {
 	refs.transferError = document.getElementById('transfer-error');
 	refs.transferTbody = document.getElementById('transfer-tbody');
 
-	refs.scheduledTransferForm = document.getElementById('scheduled-transfer-form');
-	refs.scheduledTransferEditId = document.getElementById('scheduled-transfer-edit-id');
-	refs.scheduledTransferName = document.getElementById('scheduled-transfer-name');
-	refs.scheduledTransferAmount = document.getElementById('scheduled-transfer-amount');
-	refs.scheduledTransferMonth = document.getElementById('scheduled-transfer-month');
-	refs.scheduledTransferSourceAccountId = document.getElementById('scheduled-transfer-source-account-id');
-	refs.scheduledTransferTargetAccountId = document.getElementById('scheduled-transfer-target-account-id');
-	refs.scheduledTransferSubmitBtn = document.getElementById('scheduled-transfer-submit-btn');
-	refs.scheduledTransferCancelBtn = document.getElementById('scheduled-transfer-cancel-btn');
-	refs.scheduledTransferError = document.getElementById('scheduled-transfer-error');
-	refs.scheduledTransferTbody = document.getElementById('scheduled-transfer-tbody');
+	refs.monthlyClosingForm = document.getElementById('monthly-closing-form');
+	refs.monthlyClosingEditId = document.getElementById('monthly-closing-edit-id');
+	refs.monthlyClosingMonth = document.getElementById('monthly-closing-month');
+	refs.monthlyClosingAccounts = document.getElementById('monthly-closing-accounts');
+	refs.monthlyClosingSubmitBtn = document.getElementById('monthly-closing-submit-btn');
+	refs.monthlyClosingCancelBtn = document.getElementById('monthly-closing-cancel-btn');
+	refs.monthlyClosingError = document.getElementById('monthly-closing-error');
+	refs.monthlyClosingTbody = document.getElementById('monthly-closing-tbody');
 
 	refs.forecastTbody = document.getElementById('forecast-tbody');
 	refs.accountForecastTbody = document.getElementById('account-forecast-tbody');
+	refs.historyComparisonTbody = document.getElementById('history-comparison-tbody');
 	refs.forecastMobile = document.getElementById('forecast-mobile');
 	refs.accountForecastMobile = document.getElementById('account-forecast-mobile');
+	refs.historyComparisonMobile = document.getElementById('history-comparison-mobile');
 	refs.chartCanvas = document.getElementById('forecast-chart');
 	refs.chartError = document.getElementById('chart-error');
 	refs.actionGroups = Array.from(document.querySelectorAll('.form-actions, .sync-actions, .batch-actions'));
@@ -585,15 +596,14 @@ function bindEvents() {
 
 	refs.transferForm.addEventListener('submit', onTransferSubmit);
 	refs.transferCancelBtn.addEventListener('click', resetTransferForm);
+	refs.transferType.addEventListener('change', syncTransferPlanFields);
 	refs.transferSourceAccountId.addEventListener('change', () => {
 		syncTransferTargetSelection();
 	});
 
-	refs.scheduledTransferForm.addEventListener('submit', onScheduledTransferSubmit);
-	refs.scheduledTransferCancelBtn.addEventListener('click', resetScheduledTransferForm);
-	refs.scheduledTransferSourceAccountId.addEventListener('change', () => {
-		syncScheduledTransferTargetSelection();
-	});
+	refs.monthlyClosingForm.addEventListener('submit', onMonthlyClosingSubmit);
+	refs.monthlyClosingCancelBtn.addEventListener('click', resetMonthlyClosingForm);
+	refs.monthlyClosingMonth.addEventListener('change', handleMonthlyClosingMonthChange);
 
 	bindBatchEvents('income');
 	bindBatchEvents('expense');
@@ -720,7 +730,7 @@ function resetAllForms() {
 	resetExpenseForm();
 	resetInstallmentForm();
 	resetTransferForm();
-	resetScheduledTransferForm();
+	resetMonthlyClosingForm();
 }
 
 function refreshStaticAccountSelects() {
@@ -729,12 +739,7 @@ function refreshStaticAccountSelects() {
 	setAccountSelectOptions(refs.expenseAccountId, getValidAccountId(refs.expenseAccountId.value) || defaultAccountId);
 	setAccountSelectOptions(refs.installmentAccountId, getValidAccountId(refs.installmentAccountId.value) || defaultAccountId);
 	setAccountSelectOptions(refs.transferSourceAccountId, getValidAccountId(refs.transferSourceAccountId.value) || defaultAccountId);
-	setAccountSelectOptions(
-		refs.scheduledTransferSourceAccountId,
-		getValidAccountId(refs.scheduledTransferSourceAccountId.value) || defaultAccountId
-	);
 	syncTransferTargetSelection(refs.transferTargetAccountId.value);
-	syncScheduledTransferTargetSelection(refs.scheduledTransferTargetAccountId.value);
 }
 
 function setAccountSelectOptions(selectElement, preferredValue) {
@@ -757,14 +762,6 @@ function setAccountSelectOptions(selectElement, preferredValue) {
 
 function syncTransferTargetSelection(preferredTargetId) {
 	syncTransferTargetSelectionFor(refs.transferSourceAccountId, refs.transferTargetAccountId, preferredTargetId);
-}
-
-function syncScheduledTransferTargetSelection(preferredTargetId) {
-	syncTransferTargetSelectionFor(
-		refs.scheduledTransferSourceAccountId,
-		refs.scheduledTransferTargetAccountId,
-		preferredTargetId
-	);
 }
 
 function syncTransferTargetSelectionFor(sourceSelect, targetSelect, preferredTargetId) {
@@ -1045,20 +1042,33 @@ function onTransferSubmit(event) {
 
 	const name = normalizeRequiredText(refs.transferName.value);
 	if (!name) {
-		setError(refs.transferError, '請輸入轉帳名稱。');
+		setError(refs.transferError, '請輸入轉帳規劃名稱。');
+		return;
+	}
+
+	const transferType = parseTransferPlanType(refs.transferType.value);
+	if (!transferType) {
+		setError(refs.transferError, '請選擇正確的轉帳類型。');
 		return;
 	}
 
 	const amount = parseIntegerInput(refs.transferAmount.value);
 	if (amount === null || amount <= 0) {
-		setError(refs.transferError, '每月轉帳金額需為大於 0 的整數。');
+		setError(refs.transferError, '轉帳金額需為大於 0 的整數。');
+		return;
+	}
+
+	const scheduledMonth =
+		transferType === TRANSFER_PLAN_SCHEDULED ? parseOneTimeMonth(refs.transferMonth.value) : null;
+	if (transferType === TRANSFER_PLAN_SCHEDULED && !scheduledMonth) {
+		setError(refs.transferError, '指定年月一次的轉帳需要填入有效的年月。');
 		return;
 	}
 
 	const sourceAccountId = getValidAccountId(refs.transferSourceAccountId.value);
 	const targetAccountId = getValidAccountId(refs.transferTargetAccountId.value);
 	if (!sourceAccountId || !targetAccountId) {
-		setError(refs.transferError, '轉帳需要同時指定來源與目標帳戶。');
+		setError(refs.transferError, '轉帳規劃需要同時指定來源與目標帳戶。');
 		return;
 	}
 	if (sourceAccountId === targetAccountId) {
@@ -1066,82 +1076,115 @@ function onTransferSubmit(event) {
 		return;
 	}
 
-	const payload = {
-		id: refs.transferEditId.value.trim() || makeId(),
-		name,
-		amount,
-		sourceAccountId,
-		targetAccountId,
-	};
+	const editId = refs.transferEditId.value.trim();
+	const sourceType = parseTransferPlanType(refs.transferEditSourceType.value);
+	const itemId = editId || makeId();
+	const payload =
+		transferType === TRANSFER_PLAN_MONTHLY
+			? {
+					id: itemId,
+					name,
+					amount,
+					sourceAccountId,
+					targetAccountId,
+				}
+			: {
+					id: itemId,
+					name,
+					amount,
+					sourceAccountId,
+					targetAccountId,
+					year: scheduledMonth.year,
+					monthOfYear: scheduledMonth.monthOfYear,
+				};
 
-	if (refs.transferEditId.value.trim()) {
-		if (!updateById(state.monthlyTransfers, payload)) {
-			setError(refs.transferError, '找不到要更新的轉帳項目，請重新操作。');
+	if (editId) {
+		if (sourceType && sourceType !== transferType) {
+			removeTransferPlanByType(sourceType, editId);
+			getTransferPlanCollection(transferType).push(payload);
+		} else if (!updateById(getTransferPlanCollection(transferType), payload)) {
+			setError(refs.transferError, '找不到要更新的轉帳規劃，請重新操作。');
 			resetTransferForm();
 			return;
 		}
 	} else {
-		state.monthlyTransfers.push(payload);
+		getTransferPlanCollection(transferType).push(payload);
 	}
 
 	resetTransferForm();
 	persistAndRender();
 }
 
-function onScheduledTransferSubmit(event) {
+function onMonthlyClosingSubmit(event) {
 	event.preventDefault();
-	clearError(refs.scheduledTransferError);
+	clearError(refs.monthlyClosingError);
 
-	const name = normalizeRequiredText(refs.scheduledTransferName.value);
-	if (!name) {
-		setError(refs.scheduledTransferError, '請輸入指定月份轉帳名稱。');
+	const closingMonth = parseOneTimeMonth(refs.monthlyClosingMonth.value);
+	if (!closingMonth) {
+		setError(refs.monthlyClosingError, '請選擇有效的月結月份。');
 		return;
 	}
 
-	const amount = parseIntegerInput(refs.scheduledTransferAmount.value);
-	if (amount === null || amount <= 0) {
-		setError(refs.scheduledTransferError, '指定月份轉帳金額需為大於 0 的整數。');
+	const monthDate = createMonthDate(closingMonth.year, closingMonth.monthOfYear);
+	if (!isMonthBefore(monthDate, getCurrentMonthStart())) {
+		setError(refs.monthlyClosingError, '月結月份必須早於當前月份。');
 		return;
 	}
 
-	const scheduledMonth = parseOneTimeMonth(refs.scheduledTransferMonth.value);
-	if (!scheduledMonth) {
-		setError(refs.scheduledTransferError, '指定月份轉帳需要指定有效的年月。');
+	const editId = refs.monthlyClosingEditId.value.trim();
+	const editingClosing = editId ? state.monthlyClosings.find(item => item.id === editId) || null : null;
+	const existingClosing = findMonthlyClosingByMonth(closingMonth.year, closingMonth.monthOfYear);
+	const preservedSnapshotClosing = existingClosing && (!editId || existingClosing.id === editId) ? existingClosing : null;
+	const draftSnapshot = buildMonthlyClosingDraft(monthDate);
+	const closingSnapshot = preservedSnapshotClosing || draftSnapshot;
+
+	if (!closingSnapshot) {
+		setError(refs.monthlyClosingError, '目前無法建立該月份的月結資料。');
 		return;
 	}
 
-	const sourceAccountId = getValidAccountId(refs.scheduledTransferSourceAccountId.value);
-	const targetAccountId = getValidAccountId(refs.scheduledTransferTargetAccountId.value);
-	if (!sourceAccountId || !targetAccountId) {
-		setError(refs.scheduledTransferError, '轉帳需要同時指定來源與目標帳戶。');
-		return;
-	}
-	if (sourceAccountId === targetAccountId) {
-		setError(refs.scheduledTransferError, '來源與目標帳戶不可相同。');
+	const actualInputs = Array.from(refs.monthlyClosingAccounts.querySelectorAll('[data-account-id]'));
+	if (actualInputs.length !== state.accounts.length) {
+		setError(refs.monthlyClosingError, '月結表單尚未準備完成，請重新選擇月份。');
 		return;
 	}
 
-	const payload = {
-		id: refs.scheduledTransferEditId.value.trim() || makeId(),
-		name,
-		amount,
-		sourceAccountId,
-		targetAccountId,
-		year: scheduledMonth.year,
-		monthOfYear: scheduledMonth.monthOfYear,
+	const accounts = state.accounts.map(account => {
+		const input = actualInputs.find(node => node.dataset.accountId === account.id);
+		const actualEndingBalance = input ? parseIntegerInput(input.value) : null;
+		const snapshotAccount =
+			closingSnapshot.accounts.find(item => item.accountId === account.id) ||
+			draftSnapshot?.accounts.find(item => item.accountId === account.id);
+		if (actualEndingBalance === null || !snapshotAccount) {
+			return null;
+		}
+		return {
+			accountId: account.id,
+			actualEndingBalance,
+			forecastEndingBalanceSnapshot: snapshotAccount.forecastEndingBalanceSnapshot,
+		};
+	});
+
+	if (accounts.some(item => item === null)) {
+		setError(refs.monthlyClosingError, '請為所有帳戶填入實際月末餘額。');
+		return;
+	}
+
+	const nextClosing = {
+		id: existingClosing?.id || editingClosing?.id || makeId(),
+		year: closingMonth.year,
+		monthOfYear: closingMonth.monthOfYear,
+		savedAt: new Date().toISOString(),
+		accounts,
 	};
 
-	if (refs.scheduledTransferEditId.value.trim()) {
-		if (!updateById(state.scheduledTransfers, payload)) {
-			setError(refs.scheduledTransferError, '找不到要更新的指定月份轉帳，請重新操作。');
-			resetScheduledTransferForm();
-			return;
-		}
+	if (existingClosing || editingClosing) {
+		updateById(state.monthlyClosings, nextClosing);
 	} else {
-		state.scheduledTransfers.push(payload);
+		state.monthlyClosings.push(nextClosing);
 	}
 
-	resetScheduledTransferForm();
+	resetMonthlyClosingForm();
 	persistAndRender();
 }
 
@@ -1199,21 +1242,25 @@ function resetInstallmentForm() {
 function resetTransferForm() {
 	refs.transferForm.reset();
 	refs.transferEditId.value = '';
+	refs.transferEditSourceType.value = '';
+	refs.transferType.value = TRANSFER_PLAN_MONTHLY;
+	refs.transferMonth.value = '';
 	refs.transferSourceAccountId.value = getDefaultAccountId();
 	syncTransferTargetSelection(getDefaultTransferTargetId(refs.transferSourceAccountId.value));
-	refs.transferSubmitBtn.textContent = '新增固定轉帳';
+	syncTransferPlanFields();
+	refs.transferSubmitBtn.textContent = '新增轉帳規劃';
 	refs.transferCancelBtn.classList.add('hidden');
 	clearError(refs.transferError);
 }
 
-function resetScheduledTransferForm() {
-	refs.scheduledTransferForm.reset();
-	refs.scheduledTransferEditId.value = '';
-	refs.scheduledTransferSourceAccountId.value = getDefaultAccountId();
-	syncScheduledTransferTargetSelection(getDefaultTransferTargetId(refs.scheduledTransferSourceAccountId.value));
-	refs.scheduledTransferSubmitBtn.textContent = '新增指定月份轉帳';
-	refs.scheduledTransferCancelBtn.classList.add('hidden');
-	clearError(refs.scheduledTransferError);
+function resetMonthlyClosingForm() {
+	refs.monthlyClosingForm.reset();
+	refs.monthlyClosingEditId.value = '';
+	refs.monthlyClosingMonth.value = getPreviousMonthInputValue();
+	refs.monthlyClosingSubmitBtn.textContent = '儲存月結';
+	refs.monthlyClosingCancelBtn.classList.add('hidden');
+	clearError(refs.monthlyClosingError);
+	renderMonthlyClosingAccountInputs();
 }
 
 function enterAccountEditMode(account) {
@@ -1263,27 +1310,29 @@ function enterInstallmentEditMode(item) {
 	clearError(refs.installmentError);
 }
 
-function enterTransferEditMode(item) {
+function enterTransferEditMode(item, transferType) {
 	refs.transferEditId.value = item.id;
+	refs.transferEditSourceType.value = transferType;
 	refs.transferName.value = item.name;
+	refs.transferType.value = transferType;
 	refs.transferAmount.value = item.amount;
+	refs.transferMonth.value =
+		transferType === TRANSFER_PLAN_SCHEDULED ? `${item.year}-${padDatePart(item.monthOfYear)}` : '';
 	refs.transferSourceAccountId.value = item.sourceAccountId;
 	syncTransferTargetSelection(item.targetAccountId);
-	refs.transferSubmitBtn.textContent = '儲存固定轉帳';
+	syncTransferPlanFields();
+	refs.transferSubmitBtn.textContent = '儲存轉帳規劃';
 	refs.transferCancelBtn.classList.remove('hidden');
 	clearError(refs.transferError);
 }
 
-function enterScheduledTransferEditMode(item) {
-	refs.scheduledTransferEditId.value = item.id;
-	refs.scheduledTransferName.value = item.name;
-	refs.scheduledTransferAmount.value = item.amount;
-	refs.scheduledTransferMonth.value = `${item.year}-${padDatePart(item.monthOfYear)}`;
-	refs.scheduledTransferSourceAccountId.value = item.sourceAccountId;
-	syncScheduledTransferTargetSelection(item.targetAccountId);
-	refs.scheduledTransferSubmitBtn.textContent = '儲存指定月份轉帳';
-	refs.scheduledTransferCancelBtn.classList.remove('hidden');
-	clearError(refs.scheduledTransferError);
+function enterMonthlyClosingEditMode(closing) {
+	refs.monthlyClosingEditId.value = closing.id;
+	refs.monthlyClosingMonth.value = `${closing.year}-${padDatePart(closing.monthOfYear)}`;
+	refs.monthlyClosingSubmitBtn.textContent = '儲存月結';
+	refs.monthlyClosingCancelBtn.classList.remove('hidden');
+	clearError(refs.monthlyClosingError);
+	renderMonthlyClosingAccountInputs(closing);
 }
 
 function syncIncomeCadenceField() {
@@ -1302,6 +1351,15 @@ function syncExpenseCadenceField() {
 	refs.expenseOneTimeMonth.required = showOneTimeMonth;
 }
 
+function syncTransferPlanFields() {
+	const isScheduled = parseTransferPlanType(refs.transferType.value) === TRANSFER_PLAN_SCHEDULED;
+	refs.transferMonthWrap.classList.toggle('hidden', !isScheduled);
+	refs.transferMonth.required = isScheduled;
+	if (!isScheduled) {
+		refs.transferMonth.value = '';
+	}
+}
+
 function renderAll() {
 	state = sanitizeState(state);
 	refreshStaticAccountSelects();
@@ -1309,18 +1367,21 @@ function renderAll() {
 	renderSyncPanel();
 	renderAccountTable();
 	renderTransferTable();
-	renderScheduledTransferTable();
+	renderMonthlyClosingTable();
+	renderMonthlyClosingAccountInputs();
 	renderIncomeTable();
 	renderExpenseTable();
 	renderInstallmentTable();
 
 	const forecast = calculateForecastData(state);
 	renderSummary(forecast);
+	renderHistoryComparisonTable(forecast.historyRows);
+	renderHistoryComparisonMobile(forecast.historyRows);
 	renderForecastTable(forecast.totalRows);
 	renderForecastMobile(forecast.totalRows);
 	renderAccountForecastTable(forecast.accountRows);
 	renderAccountForecastMobile(forecast.accountRows);
-	renderChart(forecast.totalRows);
+	renderChart(forecast.historyRows, forecast.totalRows);
 }
 
 function renderSettings() {
@@ -1471,15 +1532,18 @@ function renderInstallmentTable() {
 
 function renderTransferTable() {
 	refs.transferTbody.replaceChildren();
+	const plans = getCombinedTransferPlans();
 
-	if (!state.monthlyTransfers.length) {
-		appendEmptyRow(refs.transferTbody, 5, '尚未設定固定每月轉帳。');
+	if (!plans.length) {
+		appendEmptyRow(refs.transferTbody, 7, '尚未設定轉帳規劃。');
 		return;
 	}
 
-	state.monthlyTransfers.forEach(item => {
+	plans.forEach(({ item, type }) => {
 		const row = document.createElement('tr');
 		appendCell(row, item.name);
+		appendCell(row, type === TRANSFER_PLAN_MONTHLY ? '每月固定' : '指定年月一次');
+		appendCell(row, type === TRANSFER_PLAN_MONTHLY ? '每月' : `${formatYearMonthValue(item.year, item.monthOfYear)} 一次`);
 		appendCell(row, getAccountName(item.sourceAccountId));
 		appendCell(row, getAccountName(item.targetAccountId));
 		appendCell(row, formatCurrency(item.amount));
@@ -1488,7 +1552,7 @@ function renderTransferTable() {
 		actions.className = 'table-actions';
 		actions.appendChild(
 			buildActionButton('編輯', 'btn-secondary', () => {
-				enterTransferEditMode(item);
+				enterTransferEditMode(item, type);
 			})
 		);
 		actions.appendChild(
@@ -1496,11 +1560,11 @@ function renderTransferTable() {
 				const confirmed =
 					typeof window === 'undefined' || typeof window.confirm !== 'function'
 						? true
-						: window.confirm(`確定刪除轉帳「${item.name}」嗎？`);
+						: window.confirm(`確定刪除轉帳規劃「${item.name}」嗎？`);
 				if (!confirmed) {
 					return;
 				}
-				state.monthlyTransfers = state.monthlyTransfers.filter(entry => entry.id !== item.id);
+				removeTransferPlanByType(type, item.id);
 				clearEditFormIfNeeded('transfer', item.id);
 				persistAndRender();
 			})
@@ -1510,27 +1574,28 @@ function renderTransferTable() {
 	});
 }
 
-function renderScheduledTransferTable() {
-	refs.scheduledTransferTbody.replaceChildren();
+function renderMonthlyClosingTable() {
+	refs.monthlyClosingTbody.replaceChildren();
 
-	if (!state.scheduledTransfers.length) {
-		appendEmptyRow(refs.scheduledTransferTbody, 6, '尚未設定指定月份轉帳。');
+	const closings = getSortedMonthlyClosings('desc');
+	if (!closings.length) {
+		appendEmptyRow(refs.monthlyClosingTbody, 5, '尚未建立歷史月結。');
 		return;
 	}
 
-	state.scheduledTransfers.forEach(item => {
+	closings.forEach(closing => {
+		const totals = summarizeMonthlyClosing(closing);
 		const row = document.createElement('tr');
-		appendCell(row, item.name);
-		appendCell(row, formatYearMonthValue(item.year, item.monthOfYear));
-		appendCell(row, getAccountName(item.sourceAccountId));
-		appendCell(row, getAccountName(item.targetAccountId));
-		appendCell(row, formatCurrency(item.amount));
+		appendCell(row, formatYearMonthValue(closing.year, closing.monthOfYear));
+		appendCell(row, formatCurrency(totals.forecastTotal));
+		appendCell(row, formatCurrency(totals.actualTotal));
+		appendCell(row, formatCurrency(totals.delta));
 
 		const actions = document.createElement('td');
 		actions.className = 'table-actions';
 		actions.appendChild(
 			buildActionButton('編輯', 'btn-secondary', () => {
-				enterScheduledTransferEditMode(item);
+				enterMonthlyClosingEditMode(closing);
 			})
 		);
 		actions.appendChild(
@@ -1538,18 +1603,176 @@ function renderScheduledTransferTable() {
 				const confirmed =
 					typeof window === 'undefined' || typeof window.confirm !== 'function'
 						? true
-						: window.confirm(`確定刪除指定月份轉帳「${item.name}」嗎？`);
+						: window.confirm(`確定刪除 ${formatYearMonthValue(closing.year, closing.monthOfYear)} 的月結嗎？`);
 				if (!confirmed) {
 					return;
 				}
-				state.scheduledTransfers = state.scheduledTransfers.filter(entry => entry.id !== item.id);
-				clearEditFormIfNeeded('scheduled-transfer', item.id);
+				state.monthlyClosings = state.monthlyClosings.filter(item => item.id !== closing.id);
+				clearEditFormIfNeeded('monthly-closing', closing.id);
 				persistAndRender();
 			})
 		);
 		row.appendChild(actions);
-		refs.scheduledTransferTbody.appendChild(row);
+		refs.monthlyClosingTbody.appendChild(row);
 	});
+}
+
+function renderMonthlyClosingAccountInputs(prefilledClosing) {
+	if (!refs.monthlyClosingAccounts || !refs.monthlyClosingMonth) {
+		return;
+	}
+
+	const previousMonthValue = getPreviousMonthInputValue();
+	refs.monthlyClosingMonth.max = previousMonthValue;
+	if (!refs.monthlyClosingMonth.value) {
+		refs.monthlyClosingMonth.value = previousMonthValue;
+	}
+
+	const selectedMonth = parseOneTimeMonth(refs.monthlyClosingMonth.value);
+	refs.monthlyClosingAccounts.replaceChildren();
+
+	if (!selectedMonth) {
+		const emptyState = document.createElement('p');
+		emptyState.className = 'mobile-forecast-empty';
+		emptyState.textContent = '請先選擇有效的月結月份。';
+		refs.monthlyClosingAccounts.appendChild(emptyState);
+		return;
+	}
+
+	const monthDate = createMonthDate(selectedMonth.year, selectedMonth.monthOfYear);
+	const editingClosing = refs.monthlyClosingEditId.value.trim()
+		? state.monthlyClosings.find(item => item.id === refs.monthlyClosingEditId.value.trim()) || null
+		: null;
+	const existingClosing =
+		prefilledClosing ||
+		(editingClosing && editingClosing.year === selectedMonth.year && editingClosing.monthOfYear === selectedMonth.monthOfYear
+			? editingClosing
+			: null);
+	const draft = buildMonthlyClosingDraft(monthDate);
+
+	if (!draft) {
+		const emptyState = document.createElement('p');
+		emptyState.className = 'mobile-forecast-empty';
+		emptyState.textContent = '目前無法產生該月份的預測快照。';
+		refs.monthlyClosingAccounts.appendChild(emptyState);
+		return;
+	}
+
+	const list = document.createDocumentFragment();
+	state.accounts.forEach(account => {
+		const existingAccount = existingClosing?.accounts.find(item => item.accountId === account.id) || null;
+		const draftAccount = draft.accounts.find(item => item.accountId === account.id) || null;
+		const row = document.createElement('div');
+		row.className = 'closing-account-row';
+
+		const meta = document.createElement('div');
+		meta.className = 'closing-account-meta';
+
+		const title = document.createElement('strong');
+		title.textContent = account.name;
+		const preview = document.createElement('span');
+		const forecastEndingBalanceSnapshot =
+			existingAccount?.forecastEndingBalanceSnapshot ?? draftAccount?.forecastEndingBalanceSnapshot ?? 0;
+		preview.textContent = `預測月末餘額 ${formatCurrency(forecastEndingBalanceSnapshot)}`;
+		meta.appendChild(title);
+		meta.appendChild(preview);
+
+		const inputWrap = document.createElement('label');
+		inputWrap.className = 'closing-account-input';
+		inputWrap.textContent = '實際月末餘額';
+
+		const input = document.createElement('input');
+		input.type = 'number';
+		input.step = '1';
+		input.required = true;
+		input.dataset.accountId = account.id;
+		input.value = existingAccount ? existingAccount.actualEndingBalance : '';
+		inputWrap.appendChild(input);
+
+		row.appendChild(meta);
+		row.appendChild(inputWrap);
+		list.appendChild(row);
+	});
+
+	refs.monthlyClosingAccounts.appendChild(list);
+}
+
+function handleMonthlyClosingMonthChange() {
+	clearError(refs.monthlyClosingError);
+
+	const selectedMonth = parseOneTimeMonth(refs.monthlyClosingMonth.value);
+	if (!selectedMonth) {
+		renderMonthlyClosingAccountInputs();
+		return;
+	}
+
+	const existingClosing = findMonthlyClosingByMonth(selectedMonth.year, selectedMonth.monthOfYear);
+	const editId = refs.monthlyClosingEditId.value.trim();
+	if (existingClosing && existingClosing.id !== editId) {
+		enterMonthlyClosingEditMode(existingClosing);
+		return;
+	}
+
+	if (!existingClosing && editId) {
+		refs.monthlyClosingEditId.value = '';
+		refs.monthlyClosingSubmitBtn.textContent = '儲存月結';
+		refs.monthlyClosingCancelBtn.classList.add('hidden');
+	}
+
+	renderMonthlyClosingAccountInputs();
+}
+
+function parseTransferPlanType(value) {
+	if (value === TRANSFER_PLAN_MONTHLY || value === TRANSFER_PLAN_SCHEDULED) {
+		return value;
+	}
+	return null;
+}
+
+function getTransferPlanCollection(type) {
+	return type === TRANSFER_PLAN_SCHEDULED ? state.scheduledTransfers : state.monthlyTransfers;
+}
+
+function removeTransferPlanByType(type, itemId) {
+	if (type === TRANSFER_PLAN_SCHEDULED) {
+		state.scheduledTransfers = state.scheduledTransfers.filter(item => item.id !== itemId);
+		return;
+	}
+	state.monthlyTransfers = state.monthlyTransfers.filter(item => item.id !== itemId);
+}
+
+function getCombinedTransferPlans() {
+	const monthlyPlans = state.monthlyTransfers.map(item => ({ item, type: TRANSFER_PLAN_MONTHLY }));
+	const scheduledPlans = state.scheduledTransfers.map(item => ({ item, type: TRANSFER_PLAN_SCHEDULED }));
+
+	return [...monthlyPlans, ...scheduledPlans].sort((left, right) => {
+		if (left.type !== right.type) {
+			return left.type === TRANSFER_PLAN_MONTHLY ? -1 : 1;
+		}
+		if (left.type === TRANSFER_PLAN_SCHEDULED) {
+			const monthDelta = compareMonthParts(left.item.year, left.item.monthOfYear, right.item.year, right.item.monthOfYear);
+			if (monthDelta !== 0) {
+				return monthDelta;
+			}
+		}
+		return left.item.name.localeCompare(right.item.name, state.locale || DEFAULT_LOCALE);
+	});
+}
+
+function getSortedMonthlyClosings(order = 'asc') {
+	const closings = [...state.monthlyClosings];
+	closings.sort((left, right) => compareMonthParts(left.year, left.monthOfYear, right.year, right.monthOfYear));
+	return order === 'desc' ? closings.reverse() : closings;
+}
+
+function summarizeMonthlyClosing(closing) {
+	const forecastTotal = closing.accounts.reduce((sum, item) => sum + item.forecastEndingBalanceSnapshot, 0);
+	const actualTotal = closing.accounts.reduce((sum, item) => sum + item.actualEndingBalance, 0);
+	return {
+		forecastTotal,
+		actualTotal,
+		delta: actualTotal - forecastTotal,
+	};
 }
 
 function buildSelectionCell(type, itemId) {
@@ -1649,8 +1872,8 @@ function clearEditFormIfNeeded(type, itemId) {
 		resetTransferForm();
 		return;
 	}
-	if (type === 'scheduled-transfer' && refs.scheduledTransferEditId.value === itemId) {
-		resetScheduledTransferForm();
+	if (type === 'monthly-closing' && refs.monthlyClosingEditId.value === itemId) {
+		resetMonthlyClosingForm();
 	}
 }
 
@@ -2055,6 +2278,85 @@ function renderAccountForecastMobile(accountRows) {
 	});
 }
 
+function renderHistoryComparisonTable(historyRows) {
+	if (!refs.historyComparisonTbody) {
+		return;
+	}
+
+	refs.historyComparisonTbody.replaceChildren();
+
+	if (!historyRows.length) {
+		appendEmptyRow(refs.historyComparisonTbody, 5, '尚無歷史月結資料。');
+		return;
+	}
+
+	historyRows.forEach(row => {
+		const tr = document.createElement('tr');
+		if (row.delta !== 0) {
+			tr.classList.add('warning-row');
+		}
+
+		appendCell(tr, row.monthLabel, { label: '月份', className: 'forecast-cell forecast-cell-month' });
+		appendCell(tr, formatCurrency(row.forecastEndingBalance), { label: '預測月末總餘額', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.actualEndingBalance), { label: '實際月末總餘額', className: 'forecast-cell' });
+		appendCell(tr, formatCurrency(row.delta), { label: '差額', className: 'forecast-cell forecast-cell-highlight' });
+
+		const breakdownCell = document.createElement('td');
+		applyCellMeta(breakdownCell, { label: '帳戶差異', className: 'forecast-cell' });
+		breakdownCell.appendChild(buildHistoryBreakdownDetails(row));
+		tr.appendChild(breakdownCell);
+		refs.historyComparisonTbody.appendChild(tr);
+	});
+}
+
+function renderHistoryComparisonMobile(historyRows) {
+	if (!refs.historyComparisonMobile) {
+		return;
+	}
+
+	refs.historyComparisonMobile.replaceChildren();
+
+	if (!historyRows.length) {
+		const emptyState = document.createElement('p');
+		emptyState.className = 'mobile-forecast-empty';
+		emptyState.textContent = '尚無歷史月結資料。';
+		refs.historyComparisonMobile.appendChild(emptyState);
+		return;
+	}
+
+	historyRows.forEach(row => {
+		const details = document.createElement('details');
+		details.className = 'forecast-mobile-accordion-item';
+
+		const summary = document.createElement('summary');
+		summary.className = 'forecast-mobile-summary';
+
+		const titleWrap = document.createElement('div');
+		titleWrap.className = 'forecast-mobile-summary-main';
+		const title = document.createElement('strong');
+		title.textContent = row.monthLabel;
+		const subtitle = document.createElement('span');
+		subtitle.textContent = `實際 ${formatCurrency(row.actualEndingBalance)} · 差額 ${formatCurrency(row.delta)}`;
+		titleWrap.appendChild(title);
+		titleWrap.appendChild(subtitle);
+
+		const indicator = document.createElement('div');
+		indicator.className = 'forecast-mobile-summary-side';
+		indicator.appendChild(createStatusChip(row.delta === 0 ? 'ok' : 'caution', row.delta === 0 ? '已對齊' : '有差額'));
+
+		summary.appendChild(titleWrap);
+		summary.appendChild(indicator);
+		details.appendChild(summary);
+
+		const cards = document.createElement('div');
+		cards.className = 'forecast-mobile-cards';
+		cards.appendChild(buildHistoryComparisonCard(row));
+
+		details.appendChild(cards);
+		refs.historyComparisonMobile.appendChild(details);
+	});
+}
+
 function groupAccountForecastRowsByAccount(accountRows) {
 	const groups = new Map();
 
@@ -2160,6 +2462,79 @@ function buildMobileAccountForecastCard(row) {
 	return card;
 }
 
+function buildHistoryComparisonCard(row) {
+	const card = document.createElement('article');
+	card.className = 'forecast-mobile-card';
+	if (row.delta !== 0) {
+		card.classList.add('is-warning');
+	}
+
+	const header = document.createElement('div');
+	header.className = 'forecast-mobile-card-header';
+
+	const title = document.createElement('strong');
+	title.textContent = row.monthLabel;
+	header.appendChild(title);
+	header.appendChild(createStatusChip(row.delta === 0 ? 'ok' : 'caution', row.delta === 0 ? '已對齊' : '有差額'));
+
+	const grid = document.createElement('div');
+	grid.className = 'forecast-mobile-grid';
+	[
+		['預測月末總餘額', formatCurrency(row.forecastEndingBalance)],
+		['實際月末總餘額', formatCurrency(row.actualEndingBalance)],
+		['差額', formatCurrency(row.delta)],
+	].forEach(([label, value]) => {
+		grid.appendChild(buildMobileForecastPair(label, value));
+	});
+
+	const breakdown = document.createElement('div');
+	breakdown.className = 'history-breakdown-list';
+	row.accounts.forEach(accountRow => {
+		const item = document.createElement('div');
+		item.className = 'history-breakdown-item';
+
+		const name = document.createElement('strong');
+		name.textContent = accountRow.accountName;
+		const meta = document.createElement('span');
+		meta.textContent = `預測 ${formatCurrency(accountRow.forecastEndingBalanceSnapshot)} / 實際 ${formatCurrency(accountRow.actualEndingBalance)} / 差額 ${formatCurrency(accountRow.delta)}`;
+		item.appendChild(name);
+		item.appendChild(meta);
+		breakdown.appendChild(item);
+	});
+
+	card.appendChild(header);
+	card.appendChild(grid);
+	card.appendChild(breakdown);
+	return card;
+}
+
+function buildHistoryBreakdownDetails(row) {
+	const details = document.createElement('details');
+	details.className = 'history-breakdown';
+
+	const summary = document.createElement('summary');
+	summary.textContent = `查看 ${row.accounts.length} 個帳戶差異`;
+	details.appendChild(summary);
+
+	const list = document.createElement('div');
+	list.className = 'history-breakdown-list';
+	row.accounts.forEach(accountRow => {
+		const item = document.createElement('div');
+		item.className = 'history-breakdown-item';
+
+		const name = document.createElement('strong');
+		name.textContent = accountRow.accountName;
+		const meta = document.createElement('span');
+		meta.textContent = `預測 ${formatCurrency(accountRow.forecastEndingBalanceSnapshot)} / 實際 ${formatCurrency(accountRow.actualEndingBalance)} / 差額 ${formatCurrency(accountRow.delta)}`;
+		item.appendChild(name);
+		item.appendChild(meta);
+		list.appendChild(item);
+	});
+
+	details.appendChild(list);
+	return details;
+}
+
 function buildMobileForecastPair(label, value) {
 	const pair = document.createElement('div');
 	pair.className = 'forecast-mobile-pair';
@@ -2224,7 +2599,7 @@ function createStatusChip(tone, text) {
 	return chip;
 }
 
-function renderChart(totalRows) {
+function renderChart(historyRows, totalRows) {
 	clearSectionError(refs.chartError);
 
 	if (!refs.chartCanvas || typeof Chart === 'undefined') {
@@ -2243,22 +2618,39 @@ function renderChart(totalRows) {
 	}
 
 	const palette = getChartPalette();
+	const labels = [...historyRows.map(row => row.monthLabel), ...totalRows.map(row => row.monthLabel)];
+	const actualDataset = [...historyRows.map(row => row.actualEndingBalance), ...totalRows.map(() => null)];
+	const forecastDataset = [...historyRows.map(() => null), ...totalRows.map(row => row.endingBalance)];
 	forecastChart = new Chart(context, {
 		type: 'line',
 		data: {
-			labels: totalRows.map(row => row.monthLabel),
+			labels,
 			datasets: [
 				{
-					label: '月末總餘額',
-					data: totalRows.map(row => row.endingBalance),
-					borderColor: palette.line,
-					backgroundColor: palette.fill,
-					pointBackgroundColor: palette.line,
-					pointBorderColor: palette.line,
+					label: '實際月末總餘額',
+					data: actualDataset,
+					borderColor: palette.actualLine,
+					backgroundColor: palette.actualFill,
+					pointBackgroundColor: palette.actualLine,
+					pointBorderColor: palette.actualLine,
+					fill: false,
+					tension: 0.25,
+					pointRadius: 3,
+					pointHoverRadius: 5,
+					spanGaps: true,
+				},
+				{
+					label: '預測月末總餘額',
+					data: forecastDataset,
+					borderColor: palette.forecastLine,
+					backgroundColor: palette.forecastFill,
+					pointBackgroundColor: palette.forecastLine,
+					pointBorderColor: palette.forecastLine,
 					fill: true,
 					tension: 0.3,
 					pointRadius: 3,
 					pointHoverRadius: 5,
+					spanGaps: true,
 				},
 			],
 		},
@@ -2294,10 +2686,16 @@ function renderChart(totalRows) {
 			},
 			plugins: {
 				legend: {
-					display: false,
+					display: true,
+					labels: {
+						color: palette.text,
+						usePointStyle: true,
+						boxWidth: 10,
+						boxHeight: 10,
+					},
 				},
 				tooltip: {
-					displayColors: false,
+					displayColors: true,
 					backgroundColor: palette.tooltipBackground,
 					borderColor: palette.tooltipBorder,
 					borderWidth: 1,
@@ -2305,7 +2703,7 @@ function renderChart(totalRows) {
 					bodyColor: palette.tooltipText,
 					callbacks: {
 						label(context) {
-							return `月末總餘額：${formatCurrency(context.parsed.y)}`;
+							return `${context.dataset.label}：${formatCurrency(context.parsed.y)}`;
 						},
 					},
 				},
@@ -2316,24 +2714,76 @@ function renderChart(totalRows) {
 
 function calculateForecastData(currentState) {
 	const sourceState = currentState || state;
-	const forecastStart = new Date();
-	const startMonth = new Date(forecastStart.getFullYear(), forecastStart.getMonth(), 1);
+	const currentMonthStart = getCurrentMonthStart();
+	const baseline = buildForecastBaseline(sourceState, currentMonthStart);
+	const forecastRows = generateForecastRows(sourceState, {
+		startMonth: currentMonthStart,
+		monthCount: sourceState.horizonMonths,
+		startingBalances: baseline.balances,
+		currentMonthStart,
+	});
+	const historyRows = buildHistoryComparisonRows(sourceState);
+
+	return {
+		totalRows: forecastRows.totalRows,
+		accountRows: forecastRows.accountRows,
+		historyRows,
+		negativeTotalCount: forecastRows.totalRows.filter(row => row.status === 'total-negative').length,
+		negativeAccountCount: forecastRows.totalRows.filter(row => row.status !== 'ok').length,
+	};
+}
+
+function buildForecastBaseline(sourceState, targetMonthStart) {
+	const latestClosing = getLatestMonthlyClosingBefore(sourceState, targetMonthStart);
 	const balances = {};
-	const totalRows = [];
-	const accountRows = [];
 
 	sourceState.accounts.forEach(account => {
 		balances[account.id] = account.initialBalance;
 	});
 
-	for (let monthIndex = 0; monthIndex < sourceState.horizonMonths; monthIndex += 1) {
-		const monthDate = new Date(startMonth.getFullYear(), startMonth.getMonth() + monthIndex, 1);
+	if (!latestClosing) {
+		return { balances };
+	}
+
+	sourceState.accounts.forEach(account => {
+		const closingAccount = latestClosing.accounts.find(item => item.accountId === account.id);
+		balances[account.id] = closingAccount ? closingAccount.actualEndingBalance : account.initialBalance;
+	});
+
+	const replayStart = addMonthsToDate(createMonthDate(latestClosing.year, latestClosing.monthOfYear), 1);
+	const replayMonths = getMonthDifference(replayStart, targetMonthStart);
+	if (replayMonths <= 0) {
+		return { balances };
+	}
+
+	const replay = generateForecastRows(sourceState, {
+		startMonth: replayStart,
+		monthCount: replayMonths,
+		startingBalances: balances,
+		currentMonthStart: getCurrentMonthStart(),
+	});
+
+	return {
+		balances: replay.endingBalances,
+	};
+}
+
+function generateForecastRows(sourceState, options) {
+	const startMonth = options.startMonth;
+	const monthCount = options.monthCount;
+	const currentMonthStart = options.currentMonthStart;
+	const balances = { ...options.startingBalances };
+	const totalRows = [];
+	const accountRows = [];
+
+	for (let monthIndex = 0; monthIndex < monthCount; monthIndex += 1) {
+		const monthDate = addMonthsToDate(startMonth, monthIndex);
 		const monthLabel = formatMonth(monthDate);
 		const monthAccountRows = [];
 		let anyNegativeAccount = false;
 
 		sourceState.accounts.forEach(account => {
-			const startingBalance = balances[account.id] || 0;
+			const startingBalance = Number.isFinite(balances[account.id]) ? balances[account.id] : account.initialBalance;
 
 			const income = sourceState.recurringIncomes.reduce((sum, item) => {
 				if (item.accountId !== account.id || !isIncomeActiveInMonth(item, monthDate)) {
@@ -2350,14 +2800,13 @@ function calculateForecastData(currentState) {
 			}, 0);
 
 			const installment = sourceState.installments.reduce((sum, item) => {
-				if (item.accountId !== account.id || monthIndex >= item.remainingMonths) {
+				if (item.accountId !== account.id || !isInstallmentActiveInMonth(item, monthDate, currentMonthStart)) {
 					return sum;
 				}
 				return sum + item.amount;
 			}, 0);
 
 			const { transferIn, transferOut } = calculateTransferTotalsForAccount(sourceState, account.id, monthDate);
-
 			const endingBalance = startingBalance + income + transferIn - expense - installment - transferOut;
 
 			const row = {
@@ -2390,9 +2839,43 @@ function calculateForecastData(currentState) {
 	return {
 		totalRows,
 		accountRows,
-		negativeTotalCount: totalRows.filter(row => row.status === 'total-negative').length,
-		negativeAccountCount: totalRows.filter(row => row.status !== 'ok').length,
+		endingBalances: balances,
 	};
+}
+
+function buildHistoryComparisonRows(sourceState) {
+	return [...sourceState.monthlyClosings]
+		.sort((left, right) => compareMonthParts(left.year, left.monthOfYear, right.year, right.monthOfYear))
+		.map(closing => {
+			const accounts = sourceState.accounts
+				.map(account => {
+					const closingAccount = closing.accounts.find(item => item.accountId === account.id);
+					if (!closingAccount) {
+						return null;
+					}
+					return {
+						accountId: account.id,
+						accountName: account.name,
+						forecastEndingBalanceSnapshot: closingAccount.forecastEndingBalanceSnapshot,
+						actualEndingBalance: closingAccount.actualEndingBalance,
+						delta: closingAccount.actualEndingBalance - closingAccount.forecastEndingBalanceSnapshot,
+					};
+				})
+				.filter(Boolean);
+
+			const forecastEndingBalance = accounts.reduce((sum, item) => sum + item.forecastEndingBalanceSnapshot, 0);
+			const actualEndingBalance = accounts.reduce((sum, item) => sum + item.actualEndingBalance, 0);
+
+			return {
+				id: closing.id,
+				monthLabel: formatYearMonthValue(closing.year, closing.monthOfYear),
+				monthDate: createMonthDate(closing.year, closing.monthOfYear),
+				forecastEndingBalance,
+				actualEndingBalance,
+				delta: actualEndingBalance - forecastEndingBalance,
+				accounts,
+			};
+		});
 }
 
 function buildTotalForecastRow(monthLabel, monthDate, accountRows, anyNegativeAccount) {
@@ -2453,6 +2936,64 @@ function calculateTransferTotalsForAccount(sourceState, accountId, monthDate) {
 	};
 }
 
+function buildMonthlyClosingDraft(monthDate) {
+	const draftMonth = createMonthDate(monthDate.getFullYear(), monthDate.getMonth() + 1);
+	const baseline = buildForecastBaseline(state, draftMonth);
+	const result = generateForecastRows(state, {
+		startMonth: draftMonth,
+		monthCount: 1,
+		startingBalances: baseline.balances,
+		currentMonthStart: getCurrentMonthStart(),
+	});
+	const rows = result.accountRows.filter(row => isSameMonth(row.monthDate, draftMonth));
+
+	if (rows.length !== state.accounts.length) {
+		return null;
+	}
+
+	return {
+		year: draftMonth.getFullYear(),
+		monthOfYear: draftMonth.getMonth() + 1,
+		accounts: state.accounts.map(account => {
+			const row = rows.find(item => item.accountId === account.id);
+			return {
+				accountId: account.id,
+				forecastEndingBalanceSnapshot: row ? row.endingBalance : account.initialBalance,
+			};
+		}),
+	};
+}
+
+function findMonthlyClosingByMonth(year, monthOfYear) {
+	return state.monthlyClosings.find(item => item.year === year && item.monthOfYear === monthOfYear) || null;
+}
+
+function getLatestMonthlyClosingBefore(sourceState, monthDate) {
+	const closings = Array.isArray(sourceState.monthlyClosings) ? sourceState.monthlyClosings : [];
+	let latest = null;
+
+	closings.forEach(closing => {
+		const closingDate = createMonthDate(closing.year, closing.monthOfYear);
+		if (!isMonthBefore(closingDate, monthDate)) {
+			return;
+		}
+		if (!latest || compareMonthParts(latest.year, latest.monthOfYear, closing.year, closing.monthOfYear) < 0) {
+			latest = closing;
+		}
+	});
+
+	return latest;
+}
+
+function isInstallmentActiveInMonth(item, monthDate, currentMonthStart) {
+	if (compareMonthDates(monthDate, currentMonthStart) < 0) {
+		return false;
+	}
+
+	const monthOffset = getMonthDifference(currentMonthStart, monthDate);
+	return monthOffset >= 0 && monthOffset < item.remainingMonths;
+}
+
 function isIncomeActiveInMonth(item, monthDate) {
 	if (item.cadence === CADENCE_MONTHLY) {
 		return true;
@@ -2478,6 +3019,48 @@ function isExpenseActiveInMonth(item, monthDate) {
 
 function isScheduledTransferActiveInMonth(item, monthDate) {
 	return monthDate.getFullYear() === item.year && monthDate.getMonth() + 1 === item.monthOfYear;
+}
+
+function getCurrentMonthStart() {
+	const now = new Date();
+	return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function getPreviousMonthInputValue() {
+	const currentMonthStart = getCurrentMonthStart();
+	const previousMonth = addMonthsToDate(currentMonthStart, -1);
+	return `${previousMonth.getFullYear()}-${padDatePart(previousMonth.getMonth() + 1)}`;
+}
+
+function createMonthDate(year, monthOfYear) {
+	return new Date(year, monthOfYear - 1, 1);
+}
+
+function addMonthsToDate(monthDate, monthDelta) {
+	return new Date(monthDate.getFullYear(), monthDate.getMonth() + monthDelta, 1);
+}
+
+function getMonthDifference(fromMonthDate, toMonthDate) {
+	return (toMonthDate.getFullYear() - fromMonthDate.getFullYear()) * 12 + (toMonthDate.getMonth() - fromMonthDate.getMonth());
+}
+
+function compareMonthDates(left, right) {
+	return (left.getFullYear() - right.getFullYear()) * 12 + (left.getMonth() - right.getMonth());
+}
+
+function compareMonthParts(leftYear, leftMonthOfYear, rightYear, rightMonthOfYear) {
+	if (leftYear !== rightYear) {
+		return leftYear - rightYear;
+	}
+	return leftMonthOfYear - rightMonthOfYear;
+}
+
+function isMonthBefore(left, right) {
+	return compareMonthDates(left, right) < 0;
+}
+
+function isSameMonth(left, right) {
+	return compareMonthDates(left, right) === 0;
 }
 
 function formatMonth(date) {
@@ -2756,6 +3339,13 @@ function buildExportPayload() {
 		installments: state.installments.map(item => ({ ...item })),
 		monthlyTransfers: state.monthlyTransfers.map(item => ({ ...item })),
 		scheduledTransfers: state.scheduledTransfers.map(item => ({ ...item })),
+		monthlyClosings: state.monthlyClosings.map(closing => ({
+			id: closing.id,
+			year: closing.year,
+			monthOfYear: closing.monthOfYear,
+			savedAt: closing.savedAt,
+			accounts: closing.accounts.map(account => ({ ...account })),
+		})),
 		currency: state.currency,
 		locale: state.locale,
 		updatedAt: state.updatedAt,
@@ -2820,7 +3410,7 @@ function validateImportPayload(payload) {
 		if (exportVersion === LEGACY_EXPORT_VERSION) {
 			return validateLegacyImportData(payload.data);
 		}
-		if (exportVersion === PREVIOUS_EXPORT_VERSION || exportVersion === EXPORT_VERSION) {
+		if (exportVersion === EARLIER_EXPORT_VERSION || exportVersion === PREVIOUS_EXPORT_VERSION || exportVersion === EXPORT_VERSION) {
 			return validateCurrentImportData(payload.data);
 		}
 		throw new Error('不支援的備份版本。');
@@ -2843,7 +3433,7 @@ function validateLegacyImportData(data) {
 		throw new Error('找不到可匯入的舊版資料欄位。');
 	}
 
-	return sanitizeState(migrateStateToV4(normalizeStateShape(data)));
+	return sanitizeState(migrateStateToV5(normalizeStateShape(data)));
 }
 
 function validateCurrentImportData(data) {
@@ -2857,11 +3447,12 @@ function validateCurrentImportData(data) {
 	}
 
 	const normalized = normalizeStateShape(data);
-	if (Number(normalized.schemaVersion) <= 3 || !Array.isArray(normalized.accounts)) {
-		return sanitizeState(migrateStateToV4(normalized));
+	const schemaVersion = Number(normalized.schemaVersion);
+	if (!Number.isFinite(schemaVersion) || schemaVersion < SCHEMA_VERSION || !Array.isArray(normalized.accounts)) {
+		return sanitizeState(migrateStateToV5(normalized));
 	}
 
-	if (Number(normalized.schemaVersion) !== SCHEMA_VERSION) {
+	if (schemaVersion !== SCHEMA_VERSION) {
 		throw new Error(`不支援的 schemaVersion：${normalized.schemaVersion}`);
 	}
 
@@ -2938,11 +3529,12 @@ function loadState() {
 		const parsed = JSON.parse(raw);
 		const normalized = normalizeStateShape(parsed);
 		const needsMigration =
-			Number(normalized.schemaVersion) <= 3 ||
+			!Number.isFinite(Number(normalized.schemaVersion)) ||
+			Number(normalized.schemaVersion) < SCHEMA_VERSION ||
 			!Array.isArray(normalized.accounts) ||
 			Object.prototype.hasOwnProperty.call(normalized, 'initialBalance');
 
-		const nextState = sanitizeState(needsMigration ? migrateStateToV4(normalized) : normalized);
+		const nextState = sanitizeState(needsMigration ? migrateStateToV5(normalized) : normalized);
 
 		persistMigratedState(nextState);
 		return nextState;
@@ -2966,13 +3558,14 @@ function normalizeStateShape(input) {
 		installments: input.installments,
 		monthlyTransfers: input.monthlyTransfers,
 		scheduledTransfers: input.scheduledTransfers,
+		monthlyClosings: input.monthlyClosings,
 		currency: input.currency,
 		locale: input.locale,
 		updatedAt: input.updatedAt,
 	};
 }
 
-function migrateStateToV4(legacyState) {
+function migrateStateToV5(legacyState) {
 	if (Array.isArray(legacyState.accounts)) {
 		return {
 			schemaVersion: SCHEMA_VERSION,
@@ -2983,6 +3576,7 @@ function migrateStateToV4(legacyState) {
 			installments: legacyState.installments,
 			monthlyTransfers: legacyState.monthlyTransfers,
 			scheduledTransfers: legacyState.scheduledTransfers,
+			monthlyClosings: legacyState.monthlyClosings,
 			currency: legacyState.currency,
 			locale: legacyState.locale,
 			updatedAt: legacyState.updatedAt,
@@ -3000,6 +3594,7 @@ function migrateStateToV4(legacyState) {
 		installments: migrateLegacyInstallments(legacyState.installments, mainAccount.id),
 		monthlyTransfers: [],
 		scheduledTransfers: [],
+		monthlyClosings: [],
 		currency: legacyState.currency,
 		locale: legacyState.locale,
 		updatedAt: legacyState.updatedAt,
@@ -3100,6 +3695,7 @@ function sanitizeState(inputState) {
 		installments: sanitizeInstallments(source.installments, accounts),
 		monthlyTransfers: sanitizeMonthlyTransfers(source.monthlyTransfers, accounts),
 		scheduledTransfers: sanitizeScheduledTransfers(source.scheduledTransfers, accounts),
+		monthlyClosings: sanitizeMonthlyClosings(source.monthlyClosings, accounts),
 		currency: typeof source.currency === 'string' && source.currency.trim() ? source.currency.trim() : DEFAULT_CURRENCY,
 		locale: typeof source.locale === 'string' && source.locale.trim() ? source.locale.trim() : DEFAULT_LOCALE,
 		updatedAt: typeof source.updatedAt === 'string' && source.updatedAt.trim() ? source.updatedAt : new Date().toISOString(),
@@ -3399,6 +3995,75 @@ function sanitizeScheduledTransfers(items, accounts) {
 		.filter(Boolean);
 }
 
+function sanitizeMonthlyClosings(items, accounts) {
+	if (!Array.isArray(items)) {
+		return [];
+	}
+
+	const accountIds = new Set(accounts.map(account => account.id));
+	const usedIds = new Set();
+	const usedMonths = new Set();
+
+	return items
+		.map(item => {
+			if (!item || typeof item !== 'object' || !Array.isArray(item.accounts)) {
+				return null;
+			}
+
+			const year = sanitizeBoundedInteger(item.year, null, 2000, 9999);
+			const monthOfYear = sanitizeBoundedInteger(item.monthOfYear, null, 1, 12);
+			if (year === null || monthOfYear === null) {
+				return null;
+			}
+			const monthKey = `${year}-${monthOfYear}`;
+			if (usedMonths.has(monthKey)) {
+				return null;
+			}
+
+			let id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : makeId();
+			while (usedIds.has(id)) {
+				id = makeId();
+			}
+			usedIds.add(id);
+
+			const closingAccounts = [];
+			const usedAccountIds = new Set();
+			item.accounts.forEach(accountItem => {
+				if (!accountItem || typeof accountItem !== 'object' || !accountIds.has(accountItem.accountId) || usedAccountIds.has(accountItem.accountId)) {
+					return;
+				}
+
+				const actualEndingBalance = sanitizeBoundedInteger(accountItem.actualEndingBalance, null);
+				const forecastEndingBalanceSnapshot = sanitizeBoundedInteger(accountItem.forecastEndingBalanceSnapshot, null);
+				if (actualEndingBalance === null || forecastEndingBalanceSnapshot === null) {
+					return;
+				}
+
+				usedAccountIds.add(accountItem.accountId);
+				closingAccounts.push({
+					accountId: accountItem.accountId,
+					actualEndingBalance,
+					forecastEndingBalanceSnapshot,
+				});
+			});
+
+			if (!closingAccounts.length) {
+				return null;
+			}
+			usedMonths.add(monthKey);
+
+			return {
+				id,
+				year,
+				monthOfYear,
+				savedAt: typeof item.savedAt === 'string' && item.savedAt.trim() ? item.savedAt : new Date().toISOString(),
+				accounts: closingAccounts,
+			};
+		})
+		.filter(Boolean)
+		.sort((left, right) => compareMonthParts(left.year, left.monthOfYear, right.year, right.monthOfYear));
+}
+
 function sanitizeBoundedInteger(value, fallback, min, max) {
 	const parsed = parseIntegerInput(value);
 	if (parsed === null) {
@@ -3502,7 +4167,8 @@ function getAccountReferenceCount(accountId) {
 	const scheduledTransferCount = state.scheduledTransfers.filter(
 		item => item.sourceAccountId === accountId || item.targetAccountId === accountId
 	).length;
-	return incomeCount + expenseCount + installmentCount + transferCount + scheduledTransferCount;
+	const monthlyClosingCount = state.monthlyClosings.filter(item => item.accounts.some(account => account.accountId === accountId)).length;
+	return incomeCount + expenseCount + installmentCount + transferCount + scheduledTransferCount + monthlyClosingCount;
 }
 
 function getAccountDeletionBlockReason(accountId) {
@@ -3517,7 +4183,7 @@ function getAccountDeletionBlockReason(accountId) {
 		return '帳戶期初餘額不為 0，無法刪除。';
 	}
 	if (getAccountReferenceCount(accountId) > 0) {
-		return '帳戶仍被收入、支出、分期或轉帳引用，請先改掛其他帳戶。';
+		return '帳戶仍被收入、支出、分期、轉帳或歷史月結引用，請先改掛其他帳戶。';
 	}
 	if (isAccountReferencedInPendingBatches(accountId)) {
 		return '帳戶仍在批次歸戶面板中被指定，請先取消或套用。';
