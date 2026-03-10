@@ -429,6 +429,70 @@ select:focus {
 	font-size: 0.9rem;
 }
 
+.mobile-only-disclosure {
+	display: none;
+}
+
+.compact-disclosure {
+	margin-top: 10px;
+	border: 1px solid var(--card-border-soft);
+	border-radius: 14px;
+	background: var(--surface-raised);
+	overflow: hidden;
+}
+
+.compact-disclosure > summary {
+	list-style: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 11px 14px;
+	cursor: pointer;
+	font-family: 'Manrope', sans-serif;
+	font-size: 0.88rem;
+	font-weight: 700;
+	color: var(--text-main);
+}
+
+.compact-disclosure > summary::-webkit-details-marker {
+	display: none;
+}
+
+.compact-disclosure > summary::after {
+	content: '＋';
+	flex: 0 0 auto;
+	font-size: 0.95rem;
+	color: var(--text-muted);
+}
+
+.compact-disclosure[open] > summary::after {
+	content: '－';
+}
+
+.compact-disclosure > p {
+	margin: 0;
+	padding: 0 14px 12px;
+	color: var(--text-muted);
+	font-size: 0.88rem;
+	line-height: 1.55;
+}
+
+.compact-disclosure p code {
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: var(--sync-code-bg);
+	color: var(--brand-strong);
+	font-family: 'Manrope', monospace;
+	font-size: 0.82rem;
+}
+
+.setting-note-disclosure {
+	margin-top: 0;
+	border-style: dashed;
+	background: var(--note-card-bg);
+}
+
 .icon-btn {
 	position: relative;
 	width: 48px;
@@ -1152,35 +1216,50 @@ tbody tr.warning-row {
 	}
 
 	body {
-		font-size: 0.95rem;
+		font-size: 0.94rem;
 	}
 
 	.app-shell {
 		width: auto;
 		max-width: none;
-		margin: 0 10px 24px;
+		margin: 0 10px 20px;
+	}
+
+	.layout {
+		gap: 16px;
 	}
 
 	.hero,
 	.management-grid .panel,
 	.results-panel,
 	.layout > .panel {
-		padding: 16px;
+		padding: 14px;
 	}
 
 	.hero {
-		gap: 18px;
+		gap: 14px;
+	}
+
+	.hero h1 {
+		font-size: clamp(1.54rem, 6vw, 1.82rem);
+	}
+
+	.subtitle {
+		margin-top: 8px;
+		font-size: 0.92rem;
 	}
 
 	.hero-badge {
 		width: 100%;
 		min-width: 0;
+		padding: 12px 14px;
 	}
 
 	.settings-panel-top {
 		flex-direction: column;
 		align-items: stretch;
-		margin-bottom: 14px;
+		gap: 12px;
+		margin-bottom: 12px;
 	}
 
 	.settings-utility-bar {
@@ -1188,6 +1267,7 @@ tbody tr.warning-row {
 		align-self: stretch;
 		justify-content: flex-end;
 		flex-wrap: wrap;
+		gap: 8px;
 	}
 
 	.sync-utility {
@@ -1198,33 +1278,91 @@ tbody tr.warning-row {
 		left: 0;
 		right: 0;
 		width: auto;
-		padding: 16px;
-		border-radius: 20px;
+		padding: 14px;
+		border-radius: 18px;
+	}
+
+	.sync-panel-header {
+		gap: 12px;
+	}
+
+	.sync-overview {
+		margin-top: 12px;
+		gap: 10px;
+	}
+
+	.sync-connection-card {
+		padding: 14px;
+		gap: 6px;
+	}
+
+	.sync-metric-card {
+		padding: 12px;
 	}
 
 	.sync-actions,
 	.form-actions,
 	.batch-actions {
-		gap: 10px;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
 	}
 
 	.sync-actions .btn,
 	.form-actions .btn,
 	.batch-actions .btn {
-		flex: 1 1 180px;
+		width: 100%;
+		min-height: 44px;
+		margin: 0;
+	}
+
+	.sync-actions[data-visible-count='1'] > .btn:not(.hidden),
+	.form-actions[data-visible-count='1'] > .btn:not(.hidden),
+	.batch-actions[data-visible-count='1'] > .btn:not(.hidden) {
+		grid-column: 1 / -1;
+	}
+
+	.sync-actions[data-visible-count='3'] > .btn:last-child:not(.hidden),
+	.form-actions[data-visible-count='3'] > .btn:last-child:not(.hidden),
+	.batch-actions[data-visible-count='3'] > .btn:last-child:not(.hidden) {
+		grid-column: 1 / -1;
 	}
 
 	.summary-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		padding-inline: 4px;
+		gap: 10px;
+		padding-inline: 0;
+	}
+
+	.summary-card {
+		padding: 14px 14px 13px;
+	}
+
+	.summary-card p {
+		font-size: 0.84rem;
+		line-height: 1.35;
+	}
+
+	.summary-card strong {
+		margin-top: 6px;
+		font-size: 1.15rem;
+		line-height: 1.2;
 	}
 
 	.section-title {
 		flex-direction: column;
 		align-items: flex-start;
+		gap: 4px;
+	}
+
+	.section-title p {
+		font-size: 0.86rem;
 	}
 
 	.batch-bar {
+		margin-top: 12px;
+		padding: 10px 12px;
+		gap: 10px;
 		align-items: flex-start;
 	}
 
@@ -1232,27 +1370,117 @@ tbody tr.warning-row {
 		width: 100%;
 	}
 
+	.batch-panel {
+		padding: 14px;
+	}
+
+	.batch-item-row {
+		padding: 10px 12px;
+		gap: 10px;
+	}
+
+	.table-wrap {
+		margin-top: 12px;
+		border-radius: 12px;
+	}
+
+	th,
+	td {
+		padding: 9px 10px;
+	}
+
+	th {
+		font-size: 0.84rem;
+	}
+
 	.table-actions {
 		justify-content: flex-start;
 		min-width: 0;
+		gap: 6px;
+	}
+
+	.table-actions .btn {
+		padding: 6px 10px;
+		font-size: 0.8rem;
+	}
+
+	.results-stack {
+		gap: 14px;
+		margin-top: 14px;
 	}
 
 	.chart-wrap {
-		padding: 14px 10px 4px;
+		margin-top: 6px;
+		padding: 12px 10px 2px;
 	}
 
 	#forecast-chart {
-		height: 260px !important;
+		height: 240px !important;
+	}
+
+	.forecast-mobile-summary {
+		padding: 12px;
+		gap: 10px;
+	}
+
+	.forecast-mobile-summary-main strong {
+		font-size: 0.94rem;
+	}
+
+	.forecast-mobile-summary-main span {
+		font-size: 0.8rem;
+	}
+
+	.forecast-mobile-cards {
+		gap: 8px;
+		padding: 10px;
+	}
+
+	.forecast-mobile-card {
+		padding: 10px;
+	}
+
+	.forecast-mobile-card-header {
+		margin-bottom: 8px;
+		gap: 8px;
+	}
+
+	.forecast-mobile-grid {
+		gap: 6px;
+	}
+
+	.forecast-mobile-pair {
+		padding: 8px;
+	}
+
+	.forecast-mobile-pair-label {
+		font-size: 0.76rem;
+	}
+
+	.forecast-mobile-pair-value {
+		font-size: 0.88rem;
+	}
+
+	.desktop-note {
+		display: none !important;
+	}
+
+	.mobile-only-disclosure {
+		display: block;
 	}
 }
 
 @media (max-width: 480px) {
 	.app-shell {
-		margin: 0 10px 20px;
+		margin: 0 8px 18px;
+	}
+
+	.layout {
+		gap: 14px;
 	}
 
 	.hero h1 {
-		font-size: 1.55rem;
+		font-size: 1.46rem;
 	}
 
 	.subtitle,
@@ -1260,27 +1488,28 @@ tbody tr.warning-row {
 	.section-title p,
 	.form-note,
 	.sync-note {
-		font-size: 0.88rem;
+		font-size: 0.84rem;
 	}
 
 	.summary-grid {
-		grid-template-columns: 1fr;
-		padding-inline: 4px;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+		padding-inline: 0;
 	}
 
 	.summary-card {
-		padding: 16px;
+		padding: 12px;
 	}
 
 	.summary-card strong {
-		font-size: 1.2rem;
+		font-size: 1.05rem;
 	}
 
 	.form-grid.two,
 	.form-grid.three,
 	.form-grid {
 		grid-template-columns: 1fr;
-		gap: 10px;
+		gap: 8px;
 	}
 
 	input,
@@ -1299,12 +1528,12 @@ tbody tr.warning-row {
 	}
 
 	.btn {
-		padding: 9px 14px;
+		padding: 8px 12px;
 	}
 
 	.sync-popover {
-		padding: 14px;
-		border-radius: 18px;
+		padding: 12px;
+		border-radius: 16px;
 	}
 
 	.sync-popover::before {
@@ -1314,22 +1543,36 @@ tbody tr.warning-row {
 	.sync-actions .btn,
 	.form-actions .btn,
 	.batch-actions .btn {
-		flex-basis: 100%;
+		min-height: 44px;
 	}
 
 	.batch-bar,
-	.batch-panel,
-	.setting-note-card {
-		padding: 14px;
+	.batch-panel {
+		padding: 12px;
 	}
 
 	.batch-item-row {
-		padding: 12px;
-		gap: 10px;
+		padding: 10px;
+		gap: 8px;
+	}
+
+	.compact-disclosure {
+		margin-top: 8px;
+		border-radius: 12px;
+	}
+
+	.compact-disclosure > summary {
+		padding: 10px 12px;
+		font-size: 0.84rem;
+	}
+
+	.compact-disclosure > p {
+		padding: 0 12px 10px;
+		font-size: 0.84rem;
 	}
 
 	.results-panel .table-wrap {
-		margin-top: 12px;
+		margin-top: 10px;
 		border: 0;
 		background: transparent;
 		overflow: visible;
@@ -1353,15 +1596,15 @@ tbody tr.warning-row {
 
 	.results-panel tbody {
 		display: grid;
-		gap: 12px;
+		gap: 10px;
 	}
 
 	.results-panel tbody tr {
-		padding: 14px;
+		padding: 12px;
 		border: 1px solid var(--table-border);
-		border-radius: 16px;
+		border-radius: 14px;
 		background: var(--surface-raised);
-		box-shadow: 0 10px 24px rgba(12, 32, 44, 0.08);
+		box-shadow: 0 8px 20px rgba(12, 32, 44, 0.08);
 	}
 
 	.results-panel tbody tr.warning-row {
@@ -1380,8 +1623,8 @@ tbody tr.warning-row {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 4px;
-		padding: 9px 0;
+		gap: 3px;
+		padding: 7px 0;
 		border-bottom: 1px solid var(--table-row-border);
 		text-align: left;
 		min-width: 0;
@@ -1392,7 +1635,7 @@ tbody tr.warning-row {
 	.results-panel tbody td[data-label]::before {
 		content: attr(data-label);
 		color: var(--text-muted);
-		font-size: 0.82rem;
+		font-size: 0.78rem;
 		font-weight: 600;
 		text-align: left;
 		line-height: 1.35;
@@ -1432,11 +1675,11 @@ tbody tr.warning-row {
 
 	.mobile-forecast-accordion {
 		display: grid;
-		gap: 12px;
-		margin-top: 12px;
+		gap: 10px;
+		margin-top: 10px;
 	}
 
 	#forecast-chart {
-		height: 220px !important;
+		height: 210px !important;
 	}
 }

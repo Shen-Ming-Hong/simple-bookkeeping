@@ -66,7 +66,11 @@
         <p class="eyebrow">Multi-Account Planner</p>
         <h1>多帳戶記帳與財務預測</h1>
         <p class="subtitle">把不同銀行帳戶視為真實錢包，安排收入、支出、分期與每月存款轉帳，直接看到總額與各帳戶未來走勢。</p>
-        <p class="public-note">資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
+        <p class="public-note desktop-note">資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
+        <details class="compact-disclosure mobile-only-disclosure">
+          <summary>資料提醒</summary>
+          <p>資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
+        </details>
       </div>
       <div class="hero-badge">
         <span>帳戶模型</span>
@@ -161,9 +165,13 @@
                   <button type="button" class="btn btn-secondary" id="sync-disconnect-btn">中斷連線</button>
                 </div>
 
-                <p class="sync-note">
+                <p class="sync-note desktop-note">
                   需先在頁面 head 的 <code>google-client-id</code> meta 填入 Google OAuth Web Client ID，才能啟用 Drive 同步。
                 </p>
+                <details class="compact-disclosure mobile-only-disclosure">
+                  <summary>同步說明</summary>
+                  <p>需先在頁面 head 的 <code>google-client-id</code> meta 填入 Google OAuth Web Client ID，才能啟用 Drive 同步。</p>
+                </details>
               </section>
             </div>
           </div>
@@ -174,10 +182,14 @@
               預測月數（1-120）
               <input id="horizon-months" name="horizonMonths" type="number" min="1" max="120" step="1" required>
             </label>
-            <div class="setting-note-card">
+            <div class="setting-note-card desktop-note">
               <strong>資料過渡</strong>
               <p>舊版單一存款資料會自動移到「主帳戶」，之後可再拆成多帳戶。</p>
             </div>
+            <details class="compact-disclosure setting-note-disclosure mobile-only-disclosure">
+              <summary>資料過渡</summary>
+              <p>舊版單一存款資料會自動移到「主帳戶」，之後可再拆成多帳戶。</p>
+            </details>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">套用設定</button>
@@ -185,7 +197,11 @@
             <button type="button" class="btn btn-secondary" id="import-backup-btn">匯入備份</button>
           </div>
           <input id="import-backup-input" class="hidden" type="file" accept=".json,application/json">
-          <p class="form-note">匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
+          <p class="form-note desktop-note">匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
+          <details class="compact-disclosure mobile-only-disclosure">
+            <summary>匯入提醒</summary>
+            <p>匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
+          </details>
           <p id="backup-status" class="status-message" role="alert"></p>
           <p id="settings-error" class="form-error" role="alert"></p>
         </form>

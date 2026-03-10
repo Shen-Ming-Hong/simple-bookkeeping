@@ -525,6 +525,7 @@ function cacheDom() {
 	refs.accountForecastMobile = document.getElementById('account-forecast-mobile');
 	refs.chartCanvas = document.getElementById('forecast-chart');
 	refs.chartError = document.getElementById('chart-error');
+	refs.actionGroups = Array.from(document.querySelectorAll('.form-actions, .sync-actions, .batch-actions'));
 }
 
 function bindEvents() {
@@ -576,6 +577,40 @@ function bindEvents() {
 	bindBatchEvents('income');
 	bindBatchEvents('expense');
 	bindBatchEvents('installment');
+	setupActionGroupLayoutTracking();
+}
+
+function setupActionGroupLayoutTracking() {
+	if (!Array.isArray(refs.actionGroups) || !refs.actionGroups.length) {
+		return;
+	}
+
+	refs.actionGroups.forEach(group => {
+		syncActionGroupLayout(group);
+		if (typeof MutationObserver === 'undefined' || group.dataset.actionLayoutObserved === 'true') {
+			return;
+		}
+
+		const observer = new MutationObserver(() => {
+			syncActionGroupLayout(group);
+		});
+		observer.observe(group, {
+			attributes: true,
+			subtree: true,
+			attributeFilter: ['class'],
+		});
+		group.dataset.actionLayoutObserved = 'true';
+	});
+}
+
+function syncActionGroupLayout(group) {
+	if (!(group instanceof Element)) {
+		return;
+	}
+
+	const visibleCount = Array.from(group.querySelectorAll('.btn')).filter(button => !button.classList.contains('hidden'))
+		.length;
+	group.dataset.visibleCount = String(visibleCount);
 }
 
 function registerServiceWorker() {
@@ -1725,7 +1760,7 @@ function renderForecastMobile(totalRows) {
 	const title = document.createElement('strong');
 	title.textContent = '總表';
 	const subtitle = document.createElement('span');
-	subtitle.textContent = `${totalRows.length} 個月份 · 最新月末總餘額 ${formatCurrency(lastRow.endingBalance)}`;
+	subtitle.textContent = `${totalRows.length} 個月 · 末餘額 ${formatCurrency(lastRow.endingBalance)}`;
 	titleWrap.appendChild(title);
 	titleWrap.appendChild(subtitle);
 
@@ -1822,7 +1857,7 @@ function renderAccountForecastMobile(accountRows) {
 		const title = document.createElement('strong');
 		title.textContent = group.accountName;
 		const subtitle = document.createElement('span');
-		subtitle.textContent = `${group.rows.length} 個月份 · 最新月末餘額 ${formatCurrency(group.latestEndingBalance)}`;
+		subtitle.textContent = `${group.rows.length} 個月 · 末餘額 ${formatCurrency(group.latestEndingBalance)}`;
 		titleWrap.appendChild(title);
 		titleWrap.appendChild(subtitle);
 
