@@ -433,10 +433,30 @@
                 <thead>
                   <tr>
                     <th class="checkbox-col"><input id="income-select-all" type="checkbox" aria-label="全選收入"></th>
-                    <th>名稱</th>
-                    <th>帳戶</th>
-                    <th>週期</th>
-                    <th>金額</th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="income" data-sort-field="name">
+                        <span class="table-sort-button__label">名稱</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="income" data-sort-field="account">
+                        <span class="table-sort-button__label">帳戶</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="income" data-sort-field="cadence">
+                        <span class="table-sort-button__label">週期</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="income" data-sort-field="amount">
+                        <span class="table-sort-button__label">金額</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
                     <th>操作</th>
                   </tr>
                 </thead>
@@ -529,10 +549,30 @@
                 <thead>
                   <tr>
                     <th class="checkbox-col"><input id="expense-select-all" type="checkbox" aria-label="全選支出"></th>
-                    <th>名稱</th>
-                    <th>帳戶</th>
-                    <th>週期</th>
-                    <th>金額</th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="expense" data-sort-field="name">
+                        <span class="table-sort-button__label">名稱</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="expense" data-sort-field="account">
+                        <span class="table-sort-button__label">帳戶</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="expense" data-sort-field="cadence">
+                        <span class="table-sort-button__label">週期</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="expense" data-sort-field="amount">
+                        <span class="table-sort-button__label">金額</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
                     <th>操作</th>
                   </tr>
                 </thead>
@@ -599,10 +639,30 @@
                 <thead>
                   <tr>
                     <th class="checkbox-col"><input id="installment-select-all" type="checkbox" aria-label="全選分期"></th>
-                    <th>名稱</th>
-                    <th>帳戶</th>
-                    <th>每月金額</th>
-                    <th>剩餘月數</th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="installment" data-sort-field="name">
+                        <span class="table-sort-button__label">名稱</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="installment" data-sort-field="account">
+                        <span class="table-sort-button__label">帳戶</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="installment" data-sort-field="amount">
+                        <span class="table-sort-button__label">每月金額</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
+                    <th class="sortable-col" aria-sort="none">
+                      <button type="button" class="table-sort-button" data-table-sort-button data-sort-type="installment" data-sort-field="remainingMonths">
+                        <span class="table-sort-button__label">剩餘月數</span>
+                        <span class="table-sort-button__indicator" aria-hidden="true"></span>
+                      </button>
+                    </th>
                     <th>操作</th>
                   </tr>
                 </thead>

@@ -20,8 +20,23 @@ const SYNC_META_STORAGE_KEY = 'accounting_forecast_sync_meta_v1';
 const DRIVE_AUTH_STORAGE_KEY = 'accounting_forecast_drive_auth_v2';
 const DRIVE_SESSION_STORAGE_KEY = 'accounting_forecast_drive_session_v1';
 const THEME_STORAGE_KEY = 'accounting_forecast_theme_v1';
+const TABLE_SORT_STORAGE_KEY = 'accounting_forecast_table_sort_v1';
 const THEME_LIGHT = 'light';
 const THEME_DARK = 'dark';
+const SORT_DIRECTION_NONE = 'none';
+const SORT_DIRECTION_ASC = 'asc';
+const SORT_DIRECTION_DESC = 'desc';
+const SORTABLE_TABLE_TYPES = ['income', 'expense', 'installment'];
+const TABLE_SORT_FIELDS = {
+	income: ['name', 'account', 'cadence', 'amount'],
+	expense: ['name', 'account', 'cadence', 'amount'],
+	installment: ['name', 'account', 'amount', 'remainingMonths'],
+};
+const CADENCE_SORT_ORDER = {
+	[CADENCE_MONTHLY]: 0,
+	[CADENCE_YEARLY]: 1,
+	[CADENCE_ONE_TIME]: 2,
+};
 const MANAGEMENT_TAB_IDS = ['accounts', 'transfers', 'income', 'expense', 'installment', 'closings'];
 const THEME_COLOR_META_NAME = 'theme-color';
 const LIGHT_THEME_COLOR = '#f2f6f8';
@@ -164,6 +179,7 @@ function createUiState() {
 		theme: getDocumentTheme(),
 		isSyncPopoverOpen: false,
 		activeManagementTab: MANAGEMENT_TAB_IDS[0],
+		tableSorts: loadTableSortPreference(),
 		isTotalForecastExpanded: false,
 		expandedAccountForecastAccounts: new Set(),
 		hasTouchedAccountForecastExpansion: false,
@@ -212,6 +228,94 @@ function persistThemePreference(theme) {
 	} catch (error) {
 		// Ignore storage write failures and keep the active in-memory theme.
 	}
+}
+
+function getDefaultTableSortField(type) {
+	const fields = TABLE_SORT_FIELDS[type];
+	return Array.isArray(fields) && fields.length ? fields[0] : '';
+}
+
+function createDefaultTableSort(type) {
+	return {
+		field: getDefaultTableSortField(type),
+		direction: SORT_DIRECTION_NONE,
+	};
+}
+
+function createDefaultTableSorts() {
+	return SORTABLE_TABLE_TYPES.reduce((result, type) => {
+		result[type] = createDefaultTableSort(type);
+		return result;
+	}, {});
+}
+
+function sanitizeTableSortDirection(value) {
+	if (value === SORT_DIRECTION_ASC || value === SORT_DIRECTION_DESC || value === SORT_DIRECTION_NONE) {
+		return value;
+	}
+	return SORT_DIRECTION_NONE;
+}
+
+function isValidTableSortType(type) {
+	return typeof type === 'string' && SORTABLE_TABLE_TYPES.includes(type);
+}
+
+function isValidTableSortField(type, field) {
+	return typeof field === 'string' && Array.isArray(TABLE_SORT_FIELDS[type]) && TABLE_SORT_FIELDS[type].includes(field);
+}
+
+function sanitizeTableSortField(type, value) {
+	return isValidTableSortField(type, value) ? value : getDefaultTableSortField(type);
+}
+
+function sanitizeTableSortPreference(input) {
+	const source = input && typeof input === 'object' ? input : {};
+	return SORTABLE_TABLE_TYPES.reduce((result, type) => {
+		const item = source[type] && typeof source[type] === 'object' ? source[type] : {};
+		result[type] = {
+			field: sanitizeTableSortField(type, item.field),
+			direction: sanitizeTableSortDirection(item.direction),
+		};
+		return result;
+	}, {});
+}
+
+function loadTableSortPreference() {
+	if (typeof localStorage === 'undefined') {
+		return createDefaultTableSorts();
+	}
+
+	try {
+		const raw = localStorage.getItem(TABLE_SORT_STORAGE_KEY);
+		if (!raw) {
+			return createDefaultTableSorts();
+		}
+		return sanitizeTableSortPreference(JSON.parse(raw));
+	} catch (error) {
+		return createDefaultTableSorts();
+	}
+}
+
+function persistTableSortPreference() {
+	if (typeof localStorage === 'undefined') {
+		return;
+	}
+
+	try {
+		localStorage.setItem(TABLE_SORT_STORAGE_KEY, JSON.stringify(sanitizeTableSortPreference(uiState.tableSorts)));
+	} catch (error) {
+		// Ignore storage write failures and keep the active in-memory sort state.
+	}
+}
+
+function getTableSort(type) {
+	if (!isValidTableSortType(type)) {
+		return createDefaultTableSort('income');
+	}
+
+	const sorts = sanitizeTableSortPreference(uiState.tableSorts);
+	uiState.tableSorts = sorts;
+	return sorts[type];
 }
 
 function buildThemeToggleLabel(theme = uiState.theme) {
@@ -520,6 +624,43 @@ function handleManagementTabKeydown(event) {
 	setActiveManagementTab(MANAGEMENT_TAB_IDS[nextIndex], { focus: true });
 }
 
+function handleTableSortClick(event) {
+	if (!(event.currentTarget instanceof HTMLElement)) {
+		return;
+	}
+
+	const { sortType, sortField } = event.currentTarget.dataset;
+	if (!isValidTableSortType(sortType) || !isValidTableSortField(sortType, sortField)) {
+		return;
+	}
+
+	toggleTableSort(sortType, sortField);
+}
+
+function toggleTableSort(type, field) {
+	const currentSort = getTableSort(type);
+	const isSameField = currentSort.field === field;
+	let nextDirection = SORT_DIRECTION_ASC;
+
+	if (isSameField) {
+		if (currentSort.direction === SORT_DIRECTION_ASC) {
+			nextDirection = SORT_DIRECTION_DESC;
+		} else if (currentSort.direction === SORT_DIRECTION_DESC) {
+			nextDirection = SORT_DIRECTION_NONE;
+		}
+	}
+
+	uiState.tableSorts = {
+		...sanitizeTableSortPreference(uiState.tableSorts),
+		[type]: {
+			field,
+			direction: nextDirection,
+		},
+	};
+	persistTableSortPreference();
+	renderAll();
+}
+
 function createAccount(name, initialBalance) {
 	return {
 		id: makeId(),
@@ -559,6 +700,7 @@ function cacheDom() {
 	refs.summaryNegativeAccountCount = document.getElementById('summary-negative-account-count');
 	refs.managementTabButtons = Array.from(document.querySelectorAll('[data-management-tab]'));
 	refs.managementTabPanels = Array.from(document.querySelectorAll('[data-management-panel]'));
+	refs.tableSortButtons = Array.from(document.querySelectorAll('[data-table-sort-button]'));
 
 	refs.accountForm = document.getElementById('account-form');
 	refs.accountEditId = document.getElementById('account-edit-id');
@@ -699,6 +841,9 @@ function bindEvents() {
 	refs.managementTabButtons.forEach(button => {
 		button.addEventListener('click', handleManagementTabClick);
 		button.addEventListener('keydown', handleManagementTabKeydown);
+	});
+	refs.tableSortButtons.forEach(button => {
+		button.addEventListener('click', handleTableSortClick);
 	});
 
 	refs.accountForm.addEventListener('submit', onAccountSubmit);
@@ -1507,6 +1652,7 @@ function renderAll() {
 	renderIncomeTable();
 	renderExpenseTable();
 	renderInstallmentTable();
+	renderTableSortHeaders();
 
 	const forecast = calculateForecastData(state);
 	renderSummary(forecast);
@@ -1603,14 +1749,15 @@ function renderAccountTable() {
 
 function renderIncomeTable() {
 	refs.incomeTbody.replaceChildren();
+	const items = getSortedTableItems('income', state.recurringIncomes);
 
-	if (!state.recurringIncomes.length) {
+	if (!items.length) {
 		appendEmptyRow(refs.incomeTbody, 6, '尚未設定收入項目。');
 		renderBatchUi('income');
 		return;
 	}
 
-	state.recurringIncomes.forEach(item => {
+	items.forEach(item => {
 		const row = document.createElement('tr');
 		row.appendChild(buildSelectionCell('income', item.id));
 		appendCell(row, item.name);
@@ -1626,14 +1773,15 @@ function renderIncomeTable() {
 
 function renderExpenseTable() {
 	refs.expenseTbody.replaceChildren();
+	const items = getSortedTableItems('expense', state.recurringExpenses);
 
-	if (!state.recurringExpenses.length) {
+	if (!items.length) {
 		appendEmptyRow(refs.expenseTbody, 6, '尚未設定支出項目。');
 		renderBatchUi('expense');
 		return;
 	}
 
-	state.recurringExpenses.forEach(item => {
+	items.forEach(item => {
 		const row = document.createElement('tr');
 		row.appendChild(buildSelectionCell('expense', item.id));
 		appendCell(row, item.name);
@@ -1649,14 +1797,15 @@ function renderExpenseTable() {
 
 function renderInstallmentTable() {
 	refs.installmentTbody.replaceChildren();
+	const items = getSortedTableItems('installment', state.installments);
 
-	if (!state.installments.length) {
+	if (!items.length) {
 		appendEmptyRow(refs.installmentTbody, 6, '尚未設定分期項目。');
 		renderBatchUi('installment');
 		return;
 	}
 
-	state.installments.forEach(item => {
+	items.forEach(item => {
 		const row = document.createElement('tr');
 		row.appendChild(buildSelectionCell('installment', item.id));
 		appendCell(row, item.name);
@@ -2020,6 +2169,7 @@ function clearEditFormIfNeeded(type, itemId) {
 function renderBatchUi(type) {
 	const bucket = batchState[type];
 	const items = getCollectionByType(type);
+	const sortedItems = getSortedTableItems(type, items);
 	const batchRefs = getBatchRefs(type);
 	pruneBatchBucket(type);
 
@@ -2041,7 +2191,7 @@ function renderBatchUi(type) {
 	batchRefs.batchPanel.classList.remove('hidden');
 	batchRefs.batchList.replaceChildren();
 
-	items
+	sortedItems
 		.filter(item => bucket.selectedIds.has(item.id))
 		.forEach(item => {
 			const row = document.createElement('div');
@@ -3243,6 +3393,123 @@ function formatCadence(item) {
 		return `${item.year}/${padDatePart(item.monthOfYear)} 一次`;
 	}
 	return '未知';
+}
+
+function renderTableSortHeaders() {
+	if (!Array.isArray(refs.tableSortButtons) || !refs.tableSortButtons.length) {
+		return;
+	}
+
+	refs.tableSortButtons.forEach(button => {
+		if (!(button instanceof HTMLElement)) {
+			return;
+		}
+
+		const { sortType, sortField } = button.dataset;
+		if (!isValidTableSortType(sortType) || !isValidTableSortField(sortType, sortField)) {
+			return;
+		}
+
+		const sort = getTableSort(sortType);
+		const direction = sort.field === sortField ? sort.direction : SORT_DIRECTION_NONE;
+		const header = button.closest('th');
+		const labelElement = button.querySelector('.table-sort-button__label');
+		const label = labelElement ? labelElement.textContent.trim() : button.textContent.trim();
+		const actionLabel = buildTableSortButtonLabel(label, direction);
+
+		button.dataset.direction = direction;
+		button.setAttribute('aria-label', actionLabel);
+		button.setAttribute('title', actionLabel);
+
+		if (header) {
+			header.setAttribute('aria-sort', mapSortDirectionToAriaSort(direction));
+		}
+	});
+}
+
+function buildTableSortButtonLabel(label, direction) {
+	if (direction === SORT_DIRECTION_ASC) {
+		return `${label}，目前升冪排序，點擊改為降冪排序`;
+	}
+	if (direction === SORT_DIRECTION_DESC) {
+		return `${label}，目前降冪排序，點擊取消排序`;
+	}
+	return `${label}，目前未排序，點擊啟用升冪排序`;
+}
+
+function mapSortDirectionToAriaSort(direction) {
+	if (direction === SORT_DIRECTION_ASC) {
+		return 'ascending';
+	}
+	if (direction === SORT_DIRECTION_DESC) {
+		return 'descending';
+	}
+	return 'none';
+}
+
+function getSortedTableItems(type, items) {
+	const list = Array.isArray(items) ? [...items] : [];
+	const sort = getTableSort(type);
+	if (sort.direction === SORT_DIRECTION_NONE) {
+		return list;
+	}
+
+	return list
+		.map((item, index) => ({ item, index }))
+		.sort((left, right) => {
+			const delta = compareTableSortField(type, sort.field, left.item, right.item);
+			if (delta !== 0) {
+				return sort.direction === SORT_DIRECTION_DESC ? -delta : delta;
+			}
+			return left.index - right.index;
+		})
+		.map(entry => entry.item);
+}
+
+function compareTableSortField(type, field, left, right) {
+	if (!isValidTableSortType(type) || !isValidTableSortField(type, field)) {
+		return 0;
+	}
+
+	switch (field) {
+		case 'name':
+			return compareLocaleStrings(left.name, right.name);
+		case 'account':
+			return compareLocaleStrings(getAccountName(left.accountId), getAccountName(right.accountId));
+		case 'cadence':
+			return compareCadenceSortValue(left, right);
+		case 'amount':
+			return (Number(left.amount) || 0) - (Number(right.amount) || 0);
+		case 'remainingMonths':
+			return (Number(left.remainingMonths) || 0) - (Number(right.remainingMonths) || 0);
+		default:
+			return 0;
+	}
+}
+
+function compareLocaleStrings(left, right) {
+	return String(left || '').localeCompare(String(right || ''), state.locale || DEFAULT_LOCALE);
+}
+
+function compareCadenceSortValue(left, right) {
+	const typeDelta = getCadenceSortOrder(left?.cadence) - getCadenceSortOrder(right?.cadence);
+	if (typeDelta !== 0) {
+		return typeDelta;
+	}
+
+	if (left?.cadence === CADENCE_YEARLY && right?.cadence === CADENCE_YEARLY) {
+		return (left.monthOfYear || 0) - (right.monthOfYear || 0);
+	}
+
+	if (left?.cadence === CADENCE_ONE_TIME && right?.cadence === CADENCE_ONE_TIME) {
+		return compareMonthParts(left.year || 0, left.monthOfYear || 0, right.year || 0, right.monthOfYear || 0);
+	}
+
+	return 0;
+}
+
+function getCadenceSortOrder(cadence) {
+	return CADENCE_SORT_ORDER[cadence] ?? Number.MAX_SAFE_INTEGER;
 }
 
 function appendCell(row, content, options = {}) {

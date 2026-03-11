@@ -953,6 +953,71 @@ th {
 	font-size: 0.88rem;
 }
 
+th.sortable-col {
+	padding: 0;
+}
+
+.table-sort-button {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	width: 100%;
+	padding: 10px 12px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-weight: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.table-sort-button:hover {
+	color: var(--text-main);
+}
+
+.table-sort-button:focus-visible {
+	outline: 2px solid var(--brand-outline);
+	outline-offset: -2px;
+	color: var(--text-main);
+}
+
+.table-sort-button__label {
+	min-width: 0;
+}
+
+.table-sort-button__indicator {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.1rem;
+	color: var(--text-soft);
+	font-size: 0.82rem;
+	flex-shrink: 0;
+}
+
+.table-sort-button__indicator::before {
+	content: "\2195";
+}
+
+.table-sort-button[data-direction='asc'],
+.table-sort-button[data-direction='desc'],
+th.sortable-col[aria-sort='ascending'],
+th.sortable-col[aria-sort='descending'] {
+	color: var(--text-main);
+}
+
+.table-sort-button[data-direction='asc'] .table-sort-button__indicator::before {
+	content: "\2191";
+	color: var(--brand-strong);
+}
+
+.table-sort-button[data-direction='desc'] .table-sort-button__indicator::before {
+	content: "\2193";
+	color: var(--brand-strong);
+}
+
 tbody tr:hover {
 	background: var(--surface-hover);
 }
