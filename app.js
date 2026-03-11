@@ -42,10 +42,11 @@ const THEME_COLOR_META_NAME = 'theme-color';
 const LIGHT_THEME_COLOR = '#f2f6f8';
 const DARK_THEME_COLOR = '#09131f';
 const GOOGLE_CLIENT_ID_META_NAME = 'google-client-id';
-const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const GOOGLE_AUTH_SCOPE = 'https://www.googleapis.com/auth/drive.appdata openid email';
 const GOOGLE_DRIVE_FILE_NAME = 'accounting_forecast.json';
 const GOOGLE_DRIVE_API_URL = 'https://www.googleapis.com/drive/v3/files';
 const GOOGLE_DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
+const GOOGLE_USERINFO_API_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 const SYNC_UPLOAD_DEBOUNCE_MS = 1200;
 const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
 const SERVICE_WORKER_SCRIPT_URL = './service-worker.js';
@@ -140,6 +141,10 @@ function createDefaultSyncMeta() {
 		pendingUpload: false,
 		lastAuthAttemptAt: '',
 		autoReconnectEnabled: false,
+		googleAccountSub: '',
+		googleAccountEmail: '',
+		manualReconnectRequired: false,
+		silentReconnectSuppressed: false,
 	};
 }
 
@@ -466,7 +471,7 @@ function buildSyncToggleLabel() {
 }
 
 function getSyncIndicatorTone() {
-	const errorStatuses = new Set(['error', 'auth-required', 'sync-error', 'gis-error']);
+	const errorStatuses = new Set(['error', 'auth-required', 'reauth-required', 'sync-error', 'gis-error']);
 	const successStatuses = new Set(['synced', 'connected', 'cloud-applied']);
 	const progressStatuses = new Set(['syncing', 'pending-upload', 'auth-check', 'gis-loading', 'local-newer']);
 
@@ -686,10 +691,12 @@ function cacheDom() {
 	refs.syncPanelTitle = document.getElementById('sync-panel-title');
 	refs.syncConnectionStatus = document.getElementById('sync-connection-status');
 	refs.syncStatusMessage = document.getElementById('sync-status-message');
+	refs.syncAccountEmail = document.getElementById('sync-account-email');
 	refs.syncLocalUpdatedAt = document.getElementById('sync-local-updated-at');
 	refs.syncCloudUpdatedAt = document.getElementById('sync-cloud-updated-at');
 	refs.syncLastSyncedAt = document.getElementById('sync-last-synced-at');
 	refs.syncConnectBtn = document.getElementById('sync-connect-btn');
+	refs.syncChangeAccountBtn = document.getElementById('sync-change-account-btn');
 	refs.syncUploadBtn = document.getElementById('sync-upload-btn');
 	refs.syncDownloadBtn = document.getElementById('sync-download-btn');
 	refs.syncDisconnectBtn = document.getElementById('sync-disconnect-btn');
@@ -822,6 +829,9 @@ function bindEvents() {
 	refs.syncConnectBtn.addEventListener('click', () => {
 		void connectGoogleDrive();
 	});
+	refs.syncChangeAccountBtn.addEventListener('click', () => {
+		void switchGoogleDriveAccount();
+	});
 	refs.syncUploadBtn.addEventListener('click', () => {
 		void uploadToGoogleDrive();
 	});
@@ -925,6 +935,12 @@ function registerServiceWorker() {
 }
 
 function buildOfflineSyncMessage() {
+	if (syncState.meta.manualReconnectRequired) {
+		return syncState.meta.pendingUpload
+			? '目前離線，本機資料會保留；恢復連線後請重新連接 Google Drive 以續傳。'
+			: '目前離線，恢復連線後若要繼續同步，請重新連接 Google Drive。';
+	}
+
 	if (syncState.meta.autoReconnectEnabled) {
 		return syncState.meta.pendingUpload
 			? '目前離線，恢復連線後會嘗試重新連接 Google Drive，並補上尚未同步的資料。'
@@ -934,6 +950,76 @@ function buildOfflineSyncMessage() {
 	return syncState.meta.pendingUpload
 		? '目前離線，本機資料會在恢復連線後再同步到 Google Drive。'
 		: '目前離線，仍可使用本機資料。';
+}
+
+function getManualReconnectStatusDetails() {
+	if (syncState.meta.pendingUpload) {
+		return {
+			code: 'pending-auth',
+			message: '本機有尚未同步資料，請重新連接 Google Drive 後會自動續傳。',
+			tone: 'info',
+		};
+	}
+
+	return {
+		code: 'reauth-required',
+		message: '需要重新連接 Google Drive 才能繼續同步。',
+		tone: 'error',
+	};
+}
+
+function applyManualReconnectFeedback(options = {}) {
+	const status = getManualReconnectStatusDetails();
+	setSyncFeedback(status.code, status.message, status.tone, options);
+}
+
+function markManualReconnectRequired(options = {}) {
+	updateSyncMeta(
+		{
+			pendingUpload: Boolean(options.preservePendingUpload) || syncState.meta.pendingUpload || syncState.hasSessionChanges,
+			manualReconnectRequired: true,
+			silentReconnectSuppressed: true,
+		},
+		{ render: false }
+	);
+	applyManualReconnectFeedback({
+		persistStatus: options.persistStatus,
+		render: options.render,
+	});
+}
+
+function getPreferredGoogleLoginHint() {
+	if (typeof syncState.meta.googleAccountSub === 'string' && syncState.meta.googleAccountSub.trim()) {
+		return syncState.meta.googleAccountSub.trim();
+	}
+	if (typeof syncState.meta.googleAccountEmail === 'string' && syncState.meta.googleAccountEmail.trim()) {
+		return syncState.meta.googleAccountEmail.trim();
+	}
+	return '';
+}
+
+function hasRememberedGoogleAccount() {
+	return Boolean(getPreferredGoogleLoginHint());
+}
+
+function getSyncAccountLabel() {
+	if (typeof syncState.meta.googleAccountEmail === 'string' && syncState.meta.googleAccountEmail.trim()) {
+		return syncState.meta.googleAccountEmail.trim();
+	}
+	if (typeof syncState.meta.googleAccountSub === 'string' && syncState.meta.googleAccountSub.trim()) {
+		return '已記錄 Google 帳號';
+	}
+	return '尚未記錄';
+}
+
+function getSyncConnectButtonLabel() {
+	if (syncState.isConnected) {
+		return '重新授權';
+	}
+	if (syncState.meta.manualReconnectRequired || syncState.meta.autoReconnectEnabled || hasRememberedGoogleAccount()) {
+		return '重新連接 Google Drive';
+	}
+	return '連接 Google Drive';
 }
 
 function handleBrowserOnline() {
@@ -949,19 +1035,32 @@ function handleBrowserOnline() {
 		return;
 	}
 
-	if (!hasValidDriveAccessToken() && syncState.meta.autoReconnectEnabled) {
-		setSyncFeedback('auth-check', '已恢復連線，正在嘗試恢復 Google Drive 連線...', 'info', {
+	if (!hasValidDriveAccessToken() && syncState.meta.autoReconnectEnabled && !syncState.meta.manualReconnectRequired) {
+		markManualReconnectRequired({
 			persistStatus: false,
 		});
-		void attemptSilentDriveReconnect({ reason: syncState.meta.pendingUpload ? 'online-pending-upload' : 'online-reconnect' });
+		return;
+	}
+
+	if (syncState.meta.manualReconnectRequired) {
+		applyManualReconnectFeedback({
+			persistStatus: false,
+		});
 		return;
 	}
 
 	if (syncState.meta.pendingUpload) {
-		setSyncFeedback('pending-upload', '已恢復連線，本機資料將自動同步到 Google Drive。', 'info', {
+		if (hasValidDriveAccessToken()) {
+			setSyncFeedback('pending-upload', '已恢復連線，本機資料將自動同步到 Google Drive。', 'info', {
+				persistStatus: false,
+			});
+			maybeContinuePendingCloudUpload();
+			return;
+		}
+
+		setSyncFeedback('pending-auth', '本機有尚未同步的資料，請連接 Google Drive 後續傳。', 'info', {
 			persistStatus: false,
 		});
-		maybeContinuePendingCloudUpload();
 		return;
 	}
 
@@ -1679,6 +1778,7 @@ function renderSyncPanel() {
 
 	refs.syncPanelTitle.textContent = syncState.isConfigured ? 'Google Drive 同步' : 'Google Drive 同步（未設定）';
 	refs.syncConnectionStatus.textContent = getSyncConnectionLabel();
+	refs.syncAccountEmail.textContent = getSyncAccountLabel();
 	refs.syncLocalUpdatedAt.textContent = formatSyncTimestamp(state.updatedAt);
 	refs.syncCloudUpdatedAt.textContent = formatSyncTimestamp(syncState.meta.lastKnownCloudUpdatedAt);
 	refs.syncLastSyncedAt.textContent = formatSyncTimestamp(syncState.meta.lastSyncedAt);
@@ -1689,6 +1789,8 @@ function renderSyncPanel() {
 
 	refs.syncConnectBtn.disabled =
 		!syncState.isNetworkOnline || !syncState.isConfigured || !syncState.isGoogleReady || syncState.isAuthorizing || syncState.isSyncing;
+	refs.syncChangeAccountBtn.disabled = !allowManualSync;
+	refs.syncChangeAccountBtn.classList.toggle('hidden', !hasRememberedGoogleAccount());
 	refs.syncUploadBtn.disabled = !allowManualSync;
 	refs.syncDownloadBtn.disabled = !allowManualSync;
 	refs.syncDisconnectBtn.disabled =
@@ -1698,11 +1800,7 @@ function renderSyncPanel() {
 		syncState.isSyncing ||
 		(!syncState.isConnected && !syncState.accessToken && !syncState.meta.autoReconnectEnabled);
 
-	refs.syncConnectBtn.textContent = syncState.isConnected
-		? '重新授權'
-		: syncState.meta.autoReconnectEnabled
-			? '重新連接 Google Drive'
-			: '連接 Google Drive';
+	refs.syncConnectBtn.textContent = getSyncConnectButtonLabel();
 	renderSyncIndicator();
 	renderSyncPopoverState();
 }
@@ -3664,11 +3762,11 @@ function getSyncConnectionLabel() {
 	if (syncState.isConnected) {
 		return '已連接 Google Drive';
 	}
+	if (syncState.meta.manualReconnectRequired) {
+		return '需要重新連接';
+	}
 	if (syncState.statusCode === 'reauth-required' || syncState.statusCode === 'auth-required' || syncState.statusCode === 'pending-auth') {
 		return '需要重新授權';
-	}
-	if (syncState.meta.autoReconnectEnabled) {
-		return '等待恢復連線';
 	}
 	return '本機模式';
 }
@@ -4779,6 +4877,11 @@ function sanitizeSyncMeta(input) {
 		pendingUpload: Boolean(source.pendingUpload),
 		lastAuthAttemptAt: typeof source.lastAuthAttemptAt === 'string' && source.lastAuthAttemptAt.trim() ? source.lastAuthAttemptAt : '',
 		autoReconnectEnabled: Boolean(source.autoReconnectEnabled),
+		googleAccountSub: typeof source.googleAccountSub === 'string' && source.googleAccountSub.trim() ? source.googleAccountSub.trim() : '',
+		googleAccountEmail:
+			typeof source.googleAccountEmail === 'string' && source.googleAccountEmail.trim() ? source.googleAccountEmail.trim() : '',
+		manualReconnectRequired: Boolean(source.manualReconnectRequired),
+		silentReconnectSuppressed: Boolean(source.silentReconnectSuppressed),
 	};
 }
 
@@ -4866,7 +4969,8 @@ async function handleGoogleIdentityScriptReady() {
 			return;
 		}
 
-		if (syncState.meta.autoReconnectEnabled) {
+		if (syncState.meta.manualReconnectRequired) {
+			applyManualReconnectFeedback();
 			return;
 		}
 
@@ -4886,6 +4990,8 @@ async function attemptSilentDriveReconnect(options = {}) {
 		updateSyncMeta(
 			{
 				autoReconnectEnabled: true,
+				manualReconnectRequired: false,
+				silentReconnectSuppressed: false,
 			},
 			{ render: false }
 		);
@@ -4894,17 +5000,12 @@ async function attemptSilentDriveReconnect(options = {}) {
 		return true;
 	}
 
-	if (!syncState.meta.autoReconnectEnabled) {
-		return false;
+	if (syncState.meta.autoReconnectEnabled && !syncState.meta.manualReconnectRequired) {
+		markManualReconnectRequired({
+			persistStatus: false,
+		});
 	}
-
-	const authorized = await ensureDriveAuthorization({ interactive: false });
-	if (!authorized) {
-		return false;
-	}
-
-	await synchronizeCloudState({ reason: options.reason || 'startup' });
-	return true;
+	return false;
 }
 
 function resolveGoogleClientId() {
@@ -4928,18 +5029,22 @@ function setupGoogleTokenClient() {
 	syncState.isGoogleReady = true;
 	syncState.tokenClient = window.google.accounts.oauth2.initTokenClient({
 		client_id: syncState.clientId,
-		scope: GOOGLE_DRIVE_SCOPE,
+		scope: GOOGLE_AUTH_SCOPE,
 		callback: () => {},
 		error_callback: () => {},
 	});
 }
 
-async function connectGoogleDrive() {
-	if (!(await ensureDriveAuthorization({ interactive: true }))) {
+async function connectGoogleDrive(options = {}) {
+	if (!(await ensureDriveAuthorization({ interactive: true, forceAccountSelection: Boolean(options.forceAccountSelection) }))) {
 		return;
 	}
 
-	await synchronizeCloudState({ reason: 'manual-connect' });
+	await synchronizeCloudState({ reason: options.forceAccountSelection ? 'manual-switch-account' : 'manual-connect' });
+}
+
+async function switchGoogleDriveAccount() {
+	await connectGoogleDrive({ forceAccountSelection: true });
 }
 
 async function uploadToGoogleDrive() {
@@ -5000,6 +5105,7 @@ async function disconnectGoogleDrive() {
 
 async function ensureDriveAuthorization(options = {}) {
 	const interactive = Boolean(options.interactive);
+	const forceAccountSelection = Boolean(options.forceAccountSelection);
 	if (!syncState.isConfigured) {
 		setSyncFeedback('not-configured', '尚未設定 Google Client ID，雲端同步目前停用。', 'info');
 		return false;
@@ -5015,13 +5121,38 @@ async function ensureDriveAuthorization(options = {}) {
 		setSyncFeedback('gis-loading', 'Google Drive 同步仍在初始化，請稍後再試。', 'info');
 		return false;
 	}
-	if (hasValidDriveAccessToken()) {
+	if (!interactive) {
+		applyManualReconnectFeedback({
+			persistStatus: false,
+		});
+		return false;
+	}
+	const hasValidToken = hasValidDriveAccessToken();
+	const previousSession =
+		interactive && forceAccountSelection && hasValidToken
+			? {
+					accessToken: syncState.accessToken,
+					accessTokenExpiresAt: syncState.accessTokenExpiresAt,
+					accessTokenGrantedAt: syncState.accessTokenGrantedAt,
+					isConnected: syncState.isConnected,
+			  }
+			: null;
+	if (hasValidToken && !(interactive && forceAccountSelection)) {
 		syncState.isConnected = true;
 		renderSyncPanel();
 		return true;
 	}
 
-	const prompt = interactive ? 'select_account' : 'none';
+	const requestOptions = {};
+	if (forceAccountSelection) {
+		requestOptions.prompt = 'select_account';
+	}
+	if (!forceAccountSelection) {
+		const loginHint = getPreferredGoogleLoginHint();
+		if (loginHint) {
+			requestOptions.login_hint = loginHint;
+		}
+	}
 	updateSyncMeta(
 		{
 			lastAuthAttemptAt: new Date().toISOString(),
@@ -5030,27 +5161,44 @@ async function ensureDriveAuthorization(options = {}) {
 	);
 
 	try {
-		const tokenResponse = await requestGoogleAccessToken(prompt);
+		const tokenResponse = await requestGoogleAccessToken(requestOptions);
 		syncState.accessToken = tokenResponse.access_token;
 		syncState.accessTokenExpiresAt = Date.now() + Math.max(0, Number(tokenResponse.expires_in) || 0) * 1000;
 		syncState.accessTokenGrantedAt = new Date().toISOString();
 		persistDriveSession();
 		syncState.isConnected = true;
+		let accountProfile = null;
+		if (interactive || !hasRememberedGoogleAccount()) {
+			accountProfile = await fetchGoogleAccountProfile(syncState.accessToken);
+		}
 		updateSyncMeta(
 			{
 				autoReconnectEnabled: true,
+				googleAccountSub: accountProfile?.sub || (forceAccountSelection ? '' : syncState.meta.googleAccountSub),
+				googleAccountEmail: accountProfile?.email || (forceAccountSelection ? '' : syncState.meta.googleAccountEmail),
+				manualReconnectRequired: false,
+				silentReconnectSuppressed: false,
 			},
 			{ render: false }
 		);
 		setSyncFeedback('connected', '已連接 Google Drive。', 'success');
 		return true;
 	} catch (error) {
+		if (previousSession) {
+			syncState.accessToken = previousSession.accessToken;
+			syncState.accessTokenExpiresAt = previousSession.accessTokenExpiresAt;
+			syncState.accessTokenGrantedAt = previousSession.accessTokenGrantedAt;
+			syncState.isConnected = previousSession.isConnected;
+			persistDriveSession();
+			setSyncFeedback('connected', '改用其他帳號未完成，仍保持目前的 Google Drive 連線。', 'info');
+			return false;
+		}
 		clearDriveAccessToken();
 		syncState.isConnected = false;
 		if (interactive) {
 			setSyncFeedback('auth-required', getSyncFriendlyErrorMessage(error), 'error');
 		} else if (syncState.meta.autoReconnectEnabled) {
-			setSyncFeedback('reauth-required', getAutoReconnectFailureMessage(error), 'error');
+			markManualReconnectRequired();
 		} else if (syncState.meta.pendingUpload) {
 			setSyncFeedback('pending-auth', '本機有尚未同步的資料，請連接 Google Drive 後續傳。', 'info');
 		} else {
@@ -5076,7 +5224,35 @@ function clearDriveAccessToken() {
 	persistDriveSession();
 }
 
-function requestGoogleAccessToken(promptValue) {
+async function fetchGoogleAccountProfile(accessToken) {
+	if (!accessToken) {
+		return null;
+	}
+
+	try {
+		const response = await fetch(GOOGLE_USERINFO_API_URL, {
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+			},
+		});
+		if (!response.ok) {
+			return null;
+		}
+		const payload = await response.json();
+		const sub = typeof payload?.sub === 'string' && payload.sub.trim() ? payload.sub.trim() : '';
+		if (!sub) {
+			return null;
+		}
+		return {
+			sub,
+			email: typeof payload?.email === 'string' && payload.email.trim() ? payload.email.trim() : '',
+		};
+	} catch (error) {
+		return null;
+	}
+}
+
+function requestGoogleAccessToken(requestOptions = {}) {
 	return new Promise((resolve, reject) => {
 		if (!syncState.tokenClient) {
 			reject(new Error('Google Token Client 尚未初始化。'));
@@ -5107,9 +5283,14 @@ function requestGoogleAccessToken(promptValue) {
 			reject(nextError);
 		};
 
-		syncState.tokenClient.requestAccessToken({
-			prompt: promptValue,
-		});
+		const nextRequestOptions = {};
+		if (typeof requestOptions.prompt === 'string') {
+			nextRequestOptions.prompt = requestOptions.prompt;
+		}
+		if (typeof requestOptions.login_hint === 'string' && requestOptions.login_hint.trim()) {
+			nextRequestOptions.login_hint = requestOptions.login_hint.trim();
+		}
+		syncState.tokenClient.requestAccessToken(nextRequestOptions);
 	});
 }
 
@@ -5468,18 +5649,20 @@ async function parseDriveError(response) {
 function handleDriveAuthFailure() {
 	clearDriveAccessToken();
 	syncState.isConnected = false;
+	if (syncState.meta.autoReconnectEnabled) {
+		markManualReconnectRequired({
+			preservePendingUpload: true,
+		});
+		return;
+	}
 	updateSyncMeta(
 		{
 			pendingUpload: syncState.meta.pendingUpload || syncState.hasSessionChanges,
-			syncStatus: syncState.meta.autoReconnectEnabled ? 'reauth-required' : 'auth-required',
+			syncStatus: 'auth-required',
 		},
 		{ render: false }
 	);
-	setSyncFeedback(
-		syncState.meta.autoReconnectEnabled ? 'reauth-required' : 'auth-required',
-		'Google 授權已失效，請重新連接。',
-		'error'
-	);
+	setSyncFeedback('auth-required', 'Google 授權已失效，請重新連接。', 'error');
 }
 
 function handleLocalStateMutation() {
@@ -5504,13 +5687,25 @@ function handleLocalStateMutation() {
 		return;
 	}
 
-	if (syncState.isGoogleReady) {
+	if (syncState.meta.manualReconnectRequired) {
+		applyManualReconnectFeedback({
+			persistStatus: false,
+		});
+		return;
+	}
+
+	if (syncState.isGoogleReady && hasValidDriveAccessToken()) {
 		setSyncFeedback('pending-upload', '本機資料已更新，將自動同步到 Google Drive。', 'info');
 		scheduleCloudUpload();
 		return;
 	}
 
-	setSyncFeedback('pending-upload', '本機資料已更新，待 Google Drive 同步初始化後續傳。', 'info');
+	if (syncState.meta.autoReconnectEnabled || hasRememberedGoogleAccount()) {
+		setSyncFeedback('pending-auth', '本機資料已更新，重新連接 Google Drive 後會自動續傳。', 'info');
+		return;
+	}
+
+	setSyncFeedback('pending-upload', '本機資料已更新，連接 Google Drive 後即可同步。', 'info');
 }
 
 function scheduleCloudUpload() {
@@ -5540,13 +5735,19 @@ async function runScheduledCloudUpload() {
 		return;
 	}
 
-	if (!(await ensureDriveAuthorization({ interactive: false }))) {
+	if (!hasValidDriveAccessToken()) {
 		updateSyncMeta(
 			{
 				pendingUpload: true,
 			},
 			{ render: false }
 		);
+		if (syncState.meta.autoReconnectEnabled) {
+			markManualReconnectRequired({
+				preservePendingUpload: true,
+				persistStatus: false,
+			});
+		}
 		return;
 	}
 
@@ -5561,7 +5762,14 @@ async function runScheduledCloudUpload() {
 
 function maybeContinuePendingCloudUpload() {
 	syncState.isNetworkOnline = isBrowserOnline();
-	if (syncState.meta.pendingUpload && syncState.isConfigured && syncState.isNetworkOnline && !syncState.isSyncing && !syncState.isAuthorizing) {
+	if (
+		syncState.meta.pendingUpload &&
+		syncState.isConfigured &&
+		syncState.isNetworkOnline &&
+		!syncState.isSyncing &&
+		!syncState.isAuthorizing &&
+		hasValidDriveAccessToken()
+	) {
 		scheduleCloudUpload();
 	}
 }
@@ -5587,14 +5795,6 @@ function getSyncFriendlyErrorMessage(error) {
 		return '目前無法自動恢復 Google 授權，可手動連接後再同步。';
 	}
 	return message;
-}
-
-function getAutoReconnectFailureMessage(error) {
-	if (error?.code === 'offline') {
-		return buildOfflineSyncMessage();
-	}
-
-	return '無法自動恢復 Google Drive 連線，請手動重新連接。';
 }
 
 function createOfflineSyncError() {

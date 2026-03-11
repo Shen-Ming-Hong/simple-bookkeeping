@@ -151,6 +151,8 @@
                           <p id="sync-status-message" class="status-message is-info" role="status" aria-live="polite">
                             頁面會先讀本機快取，再嘗試背景同步。
                           </p>
+                          <p class="sync-label">使用帳號</p>
+                          <strong id="sync-account-email">尚未記錄</strong>
                         </div>
 
                         <div class="sync-metrics" role="list" aria-label="同步時間資訊">
@@ -171,6 +173,7 @@
 
                       <div class="sync-actions" aria-label="同步操作">
                         <button type="button" class="btn btn-primary" id="sync-connect-btn">連接 Google Drive</button>
+                        <button type="button" class="btn btn-secondary hidden" id="sync-change-account-btn">改用其他帳號</button>
                         <button type="button" class="btn btn-secondary" id="sync-upload-btn">立即上傳</button>
                         <button type="button" class="btn btn-secondary" id="sync-download-btn">從雲端同步</button>
                         <button type="button" class="btn btn-secondary" id="sync-disconnect-btn">中斷連線</button>

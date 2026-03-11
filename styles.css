@@ -1601,11 +1601,17 @@ tbody tr.warning-row {
 		grid-column: 1 / -1;
 	}
 
-	.sync-actions[data-visible-count='3'] > .btn:last-child:not(.hidden),
-	.form-actions[data-visible-count='3'] > .btn:last-child:not(.hidden),
-	.batch-actions[data-visible-count='3'] > .btn:last-child:not(.hidden) {
-		grid-column: 1 / -1;
-	}
+.sync-actions[data-visible-count='3'] > .btn:last-child:not(.hidden),
+.form-actions[data-visible-count='3'] > .btn:last-child:not(.hidden),
+.batch-actions[data-visible-count='3'] > .btn:last-child:not(.hidden) {
+	grid-column: 1 / -1;
+}
+
+.sync-actions[data-visible-count='5'] > .btn:last-child:not(.hidden),
+.form-actions[data-visible-count='5'] > .btn:last-child:not(.hidden),
+.batch-actions[data-visible-count='5'] > .btn:last-child:not(.hidden) {
+	grid-column: 1 / -1;
+}
 
 	.summary-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
