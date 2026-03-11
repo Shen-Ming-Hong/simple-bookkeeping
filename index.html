@@ -61,150 +61,153 @@
 
 <body>
   <div class="app-shell">
-    <header class="hero panel">
-      <div>
-        <p class="eyebrow">Multi-Account Planner</p>
-        <h1>多帳戶記帳與財務預測</h1>
-          <p class="subtitle">把不同銀行帳戶視為真實錢包，安排收入、支出、分期與固定或指定月份轉帳，直接看到總額與各帳戶未來走勢。</p>
-        <p class="public-note desktop-note">資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
-        <details class="compact-disclosure mobile-only-disclosure">
-          <summary>資料提醒</summary>
-          <p>資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
-        </details>
-      </div>
-      <div class="hero-badge">
-        <span>帳戶模型</span>
-        <strong>多錢包預測</strong>
-      </div>
-    </header>
-
     <main class="layout">
-      <section class="panel settings-panel">
-        <div class="settings-panel-top">
-          <h2>預測設定</h2>
-          <div class="settings-utility-bar" role="group" aria-label="介面工具">
-            <button type="button" class="icon-btn theme-toggle-btn" id="theme-toggle-btn" aria-label="切換為暗色主題"
-              title="切換為暗色主題" aria-pressed="false">
-              <span class="theme-icon icon-sun" aria-hidden="true">
-                <svg viewBox="0 0 24 24" class="toolbar-icon">
-                  <circle cx="12" cy="12" r="4"></circle>
-                  <path d="M12 2v2"></path>
-                  <path d="M12 20v2"></path>
-                  <path d="m4.93 4.93 1.41 1.41"></path>
-                  <path d="m17.66 17.66 1.41 1.41"></path>
-                  <path d="M2 12h2"></path>
-                  <path d="M20 12h2"></path>
-                  <path d="m6.34 17.66-1.41 1.41"></path>
-                  <path d="m19.07 4.93-1.41 1.41"></path>
-                </svg>
-              </span>
-              <span class="theme-icon icon-moon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" class="toolbar-icon">
-                  <path
-                    d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401">
-                  </path>
-                </svg>
-              </span>
-              <span class="sr-only">切換主題</span>
-            </button>
-            <div class="sync-utility" id="sync-utility">
-              <button type="button" class="icon-btn sync-toggle-btn" id="sync-toggle-btn" aria-haspopup="dialog"
-                aria-expanded="false" aria-controls="sync-popover" aria-label="開啟雲端同步面板" title="開啟雲端同步面板">
-                <svg viewBox="0 0 24 24" class="toolbar-icon" aria-hidden="true">
-                  <path
-                    d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915">
-                  </path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-                <span id="sync-status-dot" class="sync-status-dot" data-sync-tone="neutral" aria-hidden="true"></span>
-                <span class="sr-only">開啟雲端同步面板</span>
-              </button>
-
-              <section id="sync-popover" class="sync-popover hidden" role="dialog" aria-modal="false"
-                aria-labelledby="sync-panel-title" tabindex="-1">
-                <div class="sync-panel-header">
-                  <div>
-                    <p class="sync-eyebrow">Google Drive</p>
-                    <h3 id="sync-panel-title">本機快取 + 雲端同步</h3>
-                  </div>
-                  <div class="sync-badge">
-                    <span>雲端位置</span>
-                    <strong>appDataFolder</strong>
-                  </div>
-                </div>
-
-                <div class="sync-overview">
-                  <div class="sync-connection-card">
-                    <p class="sync-label">連線狀態</p>
-                    <strong id="sync-connection-status">尚未連接 Google Drive</strong>
-                    <p id="sync-status-message" class="status-message is-info" role="status" aria-live="polite">
-                      頁面會先讀本機快取，再嘗試背景同步。
-                    </p>
-                  </div>
-
-                  <div class="sync-metrics" role="list" aria-label="同步時間資訊">
-                    <article class="sync-metric-card" role="listitem">
-                      <p>本機資料時間</p>
-                      <strong id="sync-local-updated-at">尚未讀取</strong>
-                    </article>
-                    <article class="sync-metric-card" role="listitem">
-                      <p>雲端資料時間</p>
-                      <strong id="sync-cloud-updated-at">尚未連接</strong>
-                    </article>
-                    <article class="sync-metric-card" role="listitem">
-                      <p>最後同步時間</p>
-                      <strong id="sync-last-synced-at">尚未同步</strong>
-                    </article>
-                  </div>
-                </div>
-
-                <div class="sync-actions" aria-label="同步操作">
-                  <button type="button" class="btn btn-primary" id="sync-connect-btn">連接 Google Drive</button>
-                  <button type="button" class="btn btn-secondary" id="sync-upload-btn">立即上傳</button>
-                  <button type="button" class="btn btn-secondary" id="sync-download-btn">從雲端同步</button>
-                  <button type="button" class="btn btn-secondary" id="sync-disconnect-btn">中斷連線</button>
-                </div>
-
-                <p class="sync-note desktop-note">
-                  需先在頁面 head 的 <code>google-client-id</code> meta 填入 Google OAuth Web Client ID。為提高重新整理與重開後的自動恢復率，系統會把短期 Google 授權暫存在目前裝置的瀏覽器本機儲存。
-                </p>
-                <details class="compact-disclosure mobile-only-disclosure">
-                  <summary>同步說明</summary>
-                  <p>需先在頁面 head 的 <code>google-client-id</code> meta 填入 Google OAuth Web Client ID。為提高重新整理與重開後的自動恢復率，系統會把短期 Google 授權暫存在目前裝置的瀏覽器本機儲存。</p>
-                </details>
-              </section>
-            </div>
+      <section class="panel top-control-panel">
+        <div class="top-control-panel__intro">
+          <div class="top-control-panel__intro-head">
+            <p class="eyebrow">Multi-Account Planner</p>
+            <h1>多帳戶記帳與財務預測</h1>
+            <p class="subtitle">把不同銀行帳戶視為真實錢包，安排收入、支出、分期與固定或指定月份轉帳，直接看到總額與各帳戶未來走勢。</p>
           </div>
-        </div>
-        <form id="settings-form" novalidate>
-          <div class="form-grid two">
-            <label>
-              預測月數（1-120）
-              <input id="horizon-months" name="horizonMonths" type="number" min="1" max="120" step="1" required>
-            </label>
-            <div class="setting-note-card desktop-note">
-              <strong>資料過渡</strong>
-              <p>舊版單一存款資料會自動移到「主帳戶」，之後可再拆成多帳戶。</p>
-            </div>
-            <details class="compact-disclosure setting-note-disclosure mobile-only-disclosure">
-              <summary>資料過渡</summary>
-              <p>舊版單一存款資料會自動移到「主帳戶」，之後可再拆成多帳戶。</p>
-            </details>
+          <div class="hero-badge">
+            <span>帳戶模型</span>
+            <strong>多錢包預測</strong>
           </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">套用設定</button>
-            <button type="button" class="btn btn-secondary" id="export-backup-btn">匯出備份</button>
-            <button type="button" class="btn btn-secondary" id="import-backup-btn">匯入備份</button>
-          </div>
-          <input id="import-backup-input" class="hidden" type="file" accept=".json,application/json">
-          <p class="form-note desktop-note">匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
+          <p class="public-note desktop-note">資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
           <details class="compact-disclosure mobile-only-disclosure">
-            <summary>匯入提醒</summary>
-            <p>匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
+            <summary>資料提醒</summary>
+            <p>資料只保存在你目前使用的瀏覽器。舊版資料會自動搬進主帳戶，匯入備份會覆蓋目前內容。</p>
           </details>
-          <p id="backup-status" class="status-message" role="alert"></p>
-          <p id="settings-error" class="form-error" role="alert"></p>
-        </form>
+        </div>
+
+        <div class="top-control-panel__controls">
+          <div class="settings-panel-top">
+            <h2>預測設定</h2>
+            <div class="settings-utility-bar" role="group" aria-label="介面工具">
+              <button type="button" class="icon-btn theme-toggle-btn" id="theme-toggle-btn" aria-label="切換為暗色主題"
+                title="切換為暗色主題" aria-pressed="false">
+                <span class="theme-icon icon-sun" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" class="toolbar-icon">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M12 2v2"></path>
+                    <path d="M12 20v2"></path>
+                    <path d="m4.93 4.93 1.41 1.41"></path>
+                    <path d="m17.66 17.66 1.41 1.41"></path>
+                    <path d="M2 12h2"></path>
+                    <path d="M20 12h2"></path>
+                    <path d="m6.34 17.66-1.41 1.41"></path>
+                    <path d="m19.07 4.93-1.41 1.41"></path>
+                  </svg>
+                </span>
+                <span class="theme-icon icon-moon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" class="toolbar-icon">
+                    <path
+                      d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401">
+                    </path>
+                  </svg>
+                </span>
+                <span class="sr-only">切換主題</span>
+              </button>
+              <div class="sync-utility" id="sync-utility">
+                <button type="button" class="icon-btn sync-toggle-btn" id="sync-toggle-btn" aria-haspopup="dialog"
+                  aria-expanded="false" aria-controls="sync-popover" aria-label="開啟雲端同步面板" title="開啟雲端同步面板">
+                  <svg viewBox="0 0 24 24" class="toolbar-icon" aria-hidden="true">
+                    <path
+                      d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915">
+                    </path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <span id="sync-status-dot" class="sync-status-dot" data-sync-tone="neutral" aria-hidden="true"></span>
+                  <span class="sr-only">開啟雲端同步面板</span>
+                </button>
+
+                <section id="sync-popover" class="sync-popover hidden" role="dialog" aria-modal="false"
+                  aria-labelledby="sync-panel-title" tabindex="-1">
+                  <div class="sync-panel-header">
+                    <div>
+                      <p class="sync-eyebrow">Google Drive</p>
+                      <h3 id="sync-panel-title">本機快取 + 雲端同步</h3>
+                    </div>
+                    <div class="sync-badge">
+                      <span>雲端位置</span>
+                      <strong>appDataFolder</strong>
+                    </div>
+                  </div>
+
+                  <div class="sync-overview">
+                    <div class="sync-connection-card">
+                      <p class="sync-label">連線狀態</p>
+                      <strong id="sync-connection-status">尚未連接 Google Drive</strong>
+                      <p id="sync-status-message" class="status-message is-info" role="status" aria-live="polite">
+                        頁面會先讀本機快取，再嘗試背景同步。
+                      </p>
+                    </div>
+
+                    <div class="sync-metrics" role="list" aria-label="同步時間資訊">
+                      <article class="sync-metric-card" role="listitem">
+                        <p>本機資料時間</p>
+                        <strong id="sync-local-updated-at">尚未讀取</strong>
+                      </article>
+                      <article class="sync-metric-card" role="listitem">
+                        <p>雲端資料時間</p>
+                        <strong id="sync-cloud-updated-at">尚未連接</strong>
+                      </article>
+                      <article class="sync-metric-card" role="listitem">
+                        <p>最後同步時間</p>
+                        <strong id="sync-last-synced-at">尚未同步</strong>
+                      </article>
+                    </div>
+                  </div>
+
+                  <div class="sync-actions" aria-label="同步操作">
+                    <button type="button" class="btn btn-primary" id="sync-connect-btn">連接 Google Drive</button>
+                    <button type="button" class="btn btn-secondary" id="sync-upload-btn">立即上傳</button>
+                    <button type="button" class="btn btn-secondary" id="sync-download-btn">從雲端同步</button>
+                    <button type="button" class="btn btn-secondary" id="sync-disconnect-btn">中斷連線</button>
+                  </div>
+
+                  <p class="sync-note desktop-note">
+                    需先在頁面 head 的 <code>google-client-id</code> meta 填入 Google OAuth Web Client ID。為提高重新整理與重開後的自動恢復率，系統會把短期 Google 授權暫存在目前裝置的瀏覽器本機儲存。
+                  </p>
+                  <details class="compact-disclosure mobile-only-disclosure">
+                    <summary>同步說明</summary>
+                    <p>需先在頁面 head 的 <code>google-client-id</code> meta 填入 Google OAuth Web Client ID。為提高重新整理與重開後的自動恢復率，系統會把短期 Google 授權暫存在目前裝置的瀏覽器本機儲存。</p>
+                  </details>
+                </section>
+              </div>
+            </div>
+          </div>
+
+          <form id="settings-form" novalidate>
+            <div class="form-grid two">
+              <label>
+                預測月數（1-120）
+                <input id="horizon-months" name="horizonMonths" type="number" min="1" max="120" step="1" required>
+              </label>
+              <div class="setting-note-card desktop-note">
+                <strong>資料過渡</strong>
+                <p>舊版單一存款資料會自動移到「主帳戶」，之後可再拆成多帳戶。</p>
+              </div>
+              <details class="compact-disclosure setting-note-disclosure mobile-only-disclosure">
+                <summary>資料過渡</summary>
+                <p>舊版單一存款資料會自動移到「主帳戶」，之後可再拆成多帳戶。</p>
+              </details>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">套用設定</button>
+              <button type="button" class="btn btn-secondary" id="export-backup-btn">匯出備份</button>
+              <button type="button" class="btn btn-secondary" id="import-backup-btn">匯入備份</button>
+            </div>
+            <input id="import-backup-input" class="hidden" type="file" accept=".json,application/json">
+            <p class="form-note desktop-note">匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
+            <details class="compact-disclosure mobile-only-disclosure">
+              <summary>匯入提醒</summary>
+              <p>匯入支援舊版與新版 JSON 備份。若要保留目前內容，請先匯出備份。</p>
+            </details>
+            <p id="backup-status" class="status-message" role="alert"></p>
+            <p id="settings-error" class="form-error" role="alert"></p>
+          </form>
+        </div>
       </section>
 
       <section class="summary-grid">
