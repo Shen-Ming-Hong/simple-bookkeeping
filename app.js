@@ -22,7 +22,7 @@ const DRIVE_SESSION_STORAGE_KEY = 'accounting_forecast_drive_session_v1';
 const THEME_STORAGE_KEY = 'accounting_forecast_theme_v1';
 const THEME_LIGHT = 'light';
 const THEME_DARK = 'dark';
-const MANAGEMENT_TAB_IDS = ['accounts', 'transfers', 'closings'];
+const MANAGEMENT_TAB_IDS = ['accounts', 'transfers', 'income', 'expense', 'installment', 'closings'];
 const THEME_COLOR_META_NAME = 'theme-color';
 const LIGHT_THEME_COLOR = '#f2f6f8';
 const DARK_THEME_COLOR = '#09131f';
@@ -310,7 +310,14 @@ function renderSyncPopoverState() {
 }
 
 function focusSyncPopoverAction() {
-	const focusTarget = [refs.syncConnectBtn, refs.syncUploadBtn, refs.syncDownloadBtn, refs.syncDisconnectBtn].find(
+	const focusTarget = [
+		refs.exportBackupBtn,
+		refs.importBackupBtn,
+		refs.syncConnectBtn,
+		refs.syncUploadBtn,
+		refs.syncDownloadBtn,
+		refs.syncDisconnectBtn,
+	].find(
 		button => button && !button.disabled
 	);
 
@@ -351,7 +358,7 @@ function handleGlobalKeydown(event) {
 
 function buildSyncToggleLabel() {
 	const action = uiState.isSyncPopoverOpen ? '關閉' : '開啟';
-	return `${action}雲端同步面板。目前狀態：${syncState.statusMessage}`;
+	return `${action}設定面板。目前同步狀態：${syncState.statusMessage}`;
 }
 
 function getSyncIndicatorTone() {
