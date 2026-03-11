@@ -1,7 +1,10 @@
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const APP_SHELL_CACHE = `accounting-forecast-app-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `accounting-forecast-runtime-${CACHE_VERSION}`;
 const ACTIVE_CACHES = [APP_SHELL_CACHE, RUNTIME_CACHE];
+const NETWORK_FIRST_ASSETS = ['./', './index.html', './app.js', './styles.css'].map(asset =>
+	new URL(asset, self.registration.scope).pathname
+);
 const APP_SHELL_ASSETS = [
 	'./',
 	'./index.html',
@@ -58,10 +61,19 @@ self.addEventListener('fetch', event => {
 		return;
 	}
 
+	if (shouldHandleNetworkFirstAsset(request)) {
+		event.respondWith(handleNetworkFirstAssetRequest(request));
+		return;
+	}
+
 	if (shouldHandleStaticAsset(request)) {
 		event.respondWith(handleStaticAssetRequest(event));
 	}
 });
+
+function shouldHandleNetworkFirstAsset(request) {
+	return NETWORK_FIRST_ASSETS.includes(new URL(request.url).pathname);
+}
 
 function shouldHandleStaticAsset(request) {
 	const destinations = new Set(['script', 'style', 'image', 'font', 'manifest']);
@@ -74,8 +86,7 @@ function shouldHandleStaticAsset(request) {
 
 async function handleNavigationRequest(request) {
 	try {
-		const response = await fetch(request);
-		return response;
+		return await fetchAndCache(request, APP_SHELL_CACHE);
 	} catch (error) {
 		const cache = await caches.open(APP_SHELL_CACHE);
 		return (
@@ -85,20 +96,23 @@ async function handleNavigationRequest(request) {
 	}
 }
 
+async function handleNetworkFirstAssetRequest(request) {
+	try {
+		return await fetchAndCache(request, APP_SHELL_CACHE);
+	} catch (error) {
+		const cachedResponse = await caches.match(request);
+		if (cachedResponse) {
+			return cachedResponse;
+		}
+
+		return Response.error();
+	}
+}
+
 async function handleStaticAssetRequest(event) {
 	const { request } = event;
 	const cachedResponse = await caches.match(request);
-	const fetchPromise = fetch(request)
-		.then(async response => {
-			if (!response || !response.ok) {
-				return response;
-			}
-
-			const runtimeCache = await caches.open(RUNTIME_CACHE);
-			await runtimeCache.put(request, response.clone());
-			return response;
-		})
-		.catch(() => null);
+	const fetchPromise = fetchAndCache(request, RUNTIME_CACHE).catch(() => null);
 
 	if (cachedResponse) {
 		event.waitUntil(fetchPromise);
@@ -111,4 +125,15 @@ async function handleStaticAssetRequest(event) {
 	}
 
 	return Response.error();
+}
+
+async function fetchAndCache(request, cacheName) {
+	const response = await fetch(request);
+	if (!response || !response.ok) {
+		return response;
+	}
+
+	const cache = await caches.open(cacheName);
+	await cache.put(request, response.clone());
+	return response;
 }
