@@ -823,12 +823,94 @@ html[data-theme='dark'] .icon-moon {
 	font-size: 1.35rem;
 }
 
+.management-tabs {
+	display: grid;
+	gap: 14px;
+}
+
+.management-tabs__nav {
+	display: flex;
+	gap: 10px;
+	padding: 6px;
+	overflow-x: auto;
+	border: 1px solid var(--panel-border);
+	border-radius: 20px;
+	background: linear-gradient(180deg, var(--panel-glass), var(--panel-glass-strong));
+	scrollbar-width: thin;
+	scrollbar-color: var(--table-border) transparent;
+	-webkit-overflow-scrolling: touch;
+}
+
+.management-tabs__nav::-webkit-scrollbar {
+	height: 8px;
+}
+
+.management-tabs__nav::-webkit-scrollbar-thumb {
+	background: var(--table-border);
+	border-radius: 999px;
+}
+
+.management-tabs__panels {
+	display: grid;
+}
+
+.management-tab {
+	flex: 0 0 auto;
+	padding: 12px 18px;
+	border: 0;
+	border-radius: 14px;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	white-space: nowrap;
+	cursor: pointer;
+	scroll-snap-align: start;
+	transition:
+		background-color 160ms ease,
+		color 160ms ease,
+		box-shadow 160ms ease,
+		transform 160ms ease;
+}
+
+.management-tab:hover {
+	color: var(--text-main);
+	background: var(--surface-hover);
+}
+
+.management-tab.is-active,
+.management-tab[aria-selected='true'] {
+	color: var(--text-main);
+	background: linear-gradient(180deg, var(--surface-raised), var(--panel-bg-solid));
+	box-shadow:
+		0 10px 24px rgba(15, 36, 48, 0.08),
+		inset 0 0 0 1px var(--brand-outline);
+}
+
+.management-tab:focus-visible {
+	outline: none;
+	color: var(--text-main);
+	box-shadow:
+		0 0 0 3px var(--brand-outline),
+		0 10px 24px rgba(15, 36, 48, 0.08);
+}
+
+.management-tab-panel {
+	min-width: 0;
+}
+
+.management-tab-panel[hidden] {
+	display: none;
+}
+
 .management-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
 	gap: 16px;
 }
 
+.management-tab-panel,
 .management-grid .panel,
 .results-panel,
 .layout > .panel {
@@ -1359,6 +1441,7 @@ tbody tr.warning-row {
 	}
 
 	.top-control-panel,
+	.management-tab-panel,
 	.management-grid .panel,
 	.results-panel,
 	.layout > .panel {
@@ -1470,6 +1553,22 @@ tbody tr.warning-row {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 10px;
 		padding-inline: 0;
+	}
+
+	.management-tabs {
+		gap: 12px;
+	}
+
+	.management-tabs__nav {
+		gap: 8px;
+		padding: 5px;
+		border-radius: 16px;
+	}
+
+	.management-tab {
+		min-height: 44px;
+		padding: 10px 14px;
+		font-size: 0.9rem;
 	}
 
 	.summary-card {

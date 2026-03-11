@@ -22,6 +22,7 @@ const DRIVE_SESSION_STORAGE_KEY = 'accounting_forecast_drive_session_v1';
 const THEME_STORAGE_KEY = 'accounting_forecast_theme_v1';
 const THEME_LIGHT = 'light';
 const THEME_DARK = 'dark';
+const MANAGEMENT_TAB_IDS = ['accounts', 'transfers', 'closings'];
 const THEME_COLOR_META_NAME = 'theme-color';
 const LIGHT_THEME_COLOR = '#f2f6f8';
 const DARK_THEME_COLOR = '#09131f';
@@ -162,6 +163,7 @@ function createUiState() {
 	return {
 		theme: getDocumentTheme(),
 		isSyncPopoverOpen: false,
+		activeManagementTab: MANAGEMENT_TAB_IDS[0],
 		isTotalForecastExpanded: false,
 		expandedAccountForecastAccounts: new Set(),
 		hasTouchedAccountForecastExpansion: false,
@@ -410,6 +412,107 @@ function getChartPalette() {
 	};
 }
 
+function isValidManagementTab(tabId) {
+	return MANAGEMENT_TAB_IDS.includes(tabId);
+}
+
+function getActiveManagementTab() {
+	return isValidManagementTab(uiState.activeManagementTab) ? uiState.activeManagementTab : MANAGEMENT_TAB_IDS[0];
+}
+
+function getManagementTabButton(tabId) {
+	if (!Array.isArray(refs.managementTabButtons)) {
+		return null;
+	}
+
+	return refs.managementTabButtons.find(button => button.dataset.managementTab === tabId) || null;
+}
+
+function renderManagementTabs() {
+	const activeTabId = getActiveManagementTab();
+
+	if (Array.isArray(refs.managementTabButtons)) {
+		refs.managementTabButtons.forEach(button => {
+			const isActive = button.dataset.managementTab === activeTabId;
+			button.classList.toggle('is-active', isActive);
+			button.dataset.active = String(isActive);
+			button.setAttribute('aria-selected', String(isActive));
+			button.tabIndex = isActive ? 0 : -1;
+		});
+	}
+
+	if (Array.isArray(refs.managementTabPanels)) {
+		refs.managementTabPanels.forEach(panel => {
+			const isActive = panel.dataset.managementPanel === activeTabId;
+			panel.dataset.active = String(isActive);
+			panel.hidden = !isActive;
+		});
+	}
+}
+
+function setActiveManagementTab(nextTabId, options = {}) {
+	const targetTabId = isValidManagementTab(nextTabId) ? nextTabId : MANAGEMENT_TAB_IDS[0];
+	uiState.activeManagementTab = targetTabId;
+	renderManagementTabs();
+
+	const activeButton = getManagementTabButton(targetTabId);
+	if (!activeButton) {
+		return;
+	}
+
+	if (options.focus && typeof activeButton.focus === 'function') {
+		activeButton.focus();
+	}
+
+	if (options.scrollIntoView !== false && typeof activeButton.scrollIntoView === 'function') {
+		activeButton.scrollIntoView({
+			block: 'nearest',
+			inline: 'nearest',
+		});
+	}
+}
+
+function handleManagementTabClick(event) {
+	if (!(event.currentTarget instanceof HTMLElement)) {
+		return;
+	}
+
+	setActiveManagementTab(event.currentTarget.dataset.managementTab);
+}
+
+function handleManagementTabKeydown(event) {
+	if (!(event.currentTarget instanceof HTMLElement)) {
+		return;
+	}
+
+	const currentIndex = MANAGEMENT_TAB_IDS.indexOf(event.currentTarget.dataset.managementTab);
+	if (currentIndex < 0) {
+		return;
+	}
+
+	let nextIndex = currentIndex;
+
+	switch (event.key) {
+		case 'ArrowRight':
+			nextIndex = (currentIndex + 1) % MANAGEMENT_TAB_IDS.length;
+			break;
+		case 'ArrowLeft':
+			nextIndex = (currentIndex - 1 + MANAGEMENT_TAB_IDS.length) % MANAGEMENT_TAB_IDS.length;
+			break;
+		case 'Home':
+			nextIndex = 0;
+			break;
+		case 'End':
+			nextIndex = MANAGEMENT_TAB_IDS.length - 1;
+			break;
+		default:
+			return;
+	}
+
+	event.preventDefault();
+	setActiveManagementTab(MANAGEMENT_TAB_IDS[nextIndex], { focus: true });
+}
+
 function createAccount(name, initialBalance) {
 	return {
 		id: makeId(),
@@ -447,6 +550,8 @@ function cacheDom() {
 	refs.summaryEndingBalance = document.getElementById('summary-ending-balance');
 	refs.summaryNegativeTotalCount = document.getElementById('summary-negative-total-count');
 	refs.summaryNegativeAccountCount = document.getElementById('summary-negative-account-count');
+	refs.managementTabButtons = Array.from(document.querySelectorAll('[data-management-tab]'));
+	refs.managementTabPanels = Array.from(document.querySelectorAll('[data-management-panel]'));
 
 	refs.accountForm = document.getElementById('account-form');
 	refs.accountEditId = document.getElementById('account-edit-id');
@@ -583,6 +688,11 @@ function bindEvents() {
 		window.addEventListener('online', handleBrowserOnline);
 		window.addEventListener('offline', handleBrowserOffline);
 	}
+
+	refs.managementTabButtons.forEach(button => {
+		button.addEventListener('click', handleManagementTabClick);
+		button.addEventListener('keydown', handleManagementTabKeydown);
+	});
 
 	refs.accountForm.addEventListener('submit', onAccountSubmit);
 	refs.accountCancelBtn.addEventListener('click', resetAccountForm);
@@ -1400,6 +1510,7 @@ function renderAll() {
 	renderAccountForecastTable(forecast.accountRows);
 	renderAccountForecastMobile(forecast.accountRows);
 	renderChart(forecast.historyRows, forecast.totalRows);
+	renderManagementTabs();
 }
 
 function renderSettings() {
